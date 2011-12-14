@@ -9,18 +9,9 @@ http://code.google.com/p/dart/source/browse/branches/bleeding_edge/#bleeding_edg
 
 Prepeare your system
 ---------------------
-Ubuntu: sudo apt-get install cmake g++ g++-multilib ia32-libs libssl-dev
 
-See also:
-http://code.google.com/p/chromium/wiki/LinuxBuildInstructionsPrerequisites
-
-
-
-
-
-Prepeare your system
----------------------
-Ubuntu: sudo apt-get install cmake g++ g++-multilib ia32-libs libssl-dev
+Ubuntu 64: sudo apt-get install cmake g++ g++-multilib ia32-libs libssl-dev
+Windows  : Install cmake, other libs are downloaded automatically
 
 See also:
 http://code.google.com/p/chromium/wiki/LinuxBuildInstructionsPrerequisites
@@ -39,8 +30,8 @@ Build
 
 
 
-"Hello World" from scratch
----------------------------
+"Hello World" from scratch (Linux)
+----------------------------------
 
 To get started here the commands which are needed on Linux to run a simple dart script:
 
@@ -88,7 +79,6 @@ git svn fetch
 TODO
 ----
 - cmake: install rules
-- cmake: Windows support
 - embed example
 - add tests
 
