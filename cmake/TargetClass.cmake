@@ -3,7 +3,7 @@
 # BSD-style license that can be found in the LICENSE file.
 
 
-find_package(PythonInterp)
+find_package(PythonInterp REQUIRED)
 
 
 macro(t_setTopDir _dir)
@@ -89,11 +89,16 @@ endmacro()
 
 macro(t_makeExecutable)
     add_executable(${t_name} ${t_sources} ${t_headers})
-    set(_circular dart_api dart_vm dart_builtin dart_lib) # no -Wl-*group on Mac
-    if(UNIX)
-        target_link_libraries(${t_name} ${_circular} ${t_libraries} ${_circular})
-        target_link_libraries(${t_name} jscre double_conversion -lpthread -lcrypto ${librt})
+    set(_libdarts dart_api dart_vm dart_builtin dart_lib)
+    if(LINUX OR APPLE)
+        set(_libdarts ${_libdarts} ${t_libraries} ${_libdarts}) # no -Wl-*group on Mac
+        set(_libplatform -lpthread -lcrypto ${librt})
     endif()
+    if(WIN32)
+        list(APPEND _libdarts ${t_libraries})
+        set(_libplatform ${libopenssl} ws2_32 Rpcrt4)
+    endif()
+    target_link_libraries(${t_name} ${_libdarts} jscre double_conversion ${_libplatform})
     addDependencies()
 endmacro()
 

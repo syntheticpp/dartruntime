@@ -16,9 +16,10 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE DEBUG)
 endif()
 if(CMAKE_BUILD_TYPE MATCHES DEBUG)
-    add_definitions(-DDEBUG -D_DEBUG)
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DDEBUG")
+else()
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_DEBUG} -DNDEBUG")
 endif()
-
 
 if(UNIX AND NOT APPLE)
     set(LINUX 1)
@@ -30,7 +31,7 @@ if(CMAKE_COMPILER_IS_GNUCXX)
     set(warn  "-Wall -Wextra -Wno-unused-parameter -Wnon-virtual-dtor")
     set(lang  "-ansi -fno-rtti -fno-exceptions")
     set(link  "-fvisibility=hidden -fvisibility-inlines-hidden")
-    if(GCC_VERSION VERSION_LESS 4.6)
+    if(GCC_VERSION VERSION_LESS 4.6 AND NOT APPLE)
         set(warn "${warn} -Werror")
     endif()
     if(NOT GCC_VERSION VERSION_LESS 4.3)
@@ -44,9 +45,36 @@ if(CMAKE_COMPILER_IS_GNUCXX)
         set(multi "-arch i386")
         set(bin_sub_dir \${CONFIGURATION})
     endif()
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${warn} ${multi} ${lang} ${link}")
+    
 endif()
 
+if(MSVC)
+    if(NOT openssl)
+        message(FATAL_ERROR "'openssl' not set, install 'Win32OpenSSL' and set openssl")
+    endif()
+    include_directories(${openssl}/include)
+    set(_ldir ${openssl}/lib/VC)
+    set(libopenssl debug ${_ldir}/libeay32MDd.lib optimized ${_ldir}/libeay32MD.lib)
+    if(MSVC_IDE)
+        set(bin_sub_dir "\$(Configuration)")
+    endif()
+    set(warn_level 1)
+    if(CMAKE_CXX_FLAGS MATCHES "/W[0-4]")
+        string(REGEX REPLACE "/W[0-4]" "/W${warn_level}" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+    endif()
+    if(CMAKE_CXX_FLAGS MATCHES "/EHsc")
+        string(REGEX REPLACE "/Esc" "/Esc-" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+    endif()
+    #set(warn_error   "/we4101")
+    set(warn_disable "/wd4018 /wd4099 /wd4100 /wd4127 /wd4146 /wd4189 /wd4200 /wd4244 /wd4245 /wd4291 /wd4389 /wd4512 /wd4611 /wd4701 /wd4702 /wd4731 /wd4706 /wd4800")
+    set(warn "${warn_disable} ${warn_error}")
+    set(lang  "/GR- /GS /Zc:wchar_t")
+    add_definitions(-D_CRT_SECURE_NO_DEPRECATE -D_CRT_NONSTDC_NO_DEPRECATE)
+    # disable checked iterators for msvc release builds to get maximum speed
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /D_SECURE_SCL=0")
+endif()
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${warn} ${multi} ${lang} ${link}")
 
 
 include(TargetClass)
@@ -68,9 +96,10 @@ t_makeLibrary()
 t_init(dart_builtin)
 t_findHeaders(bin .h)
 t_findSources(bin .cc)
-t_removeSources(ALL  main _test builtin_in snapshot)
+t_removeSources(ALL  main _test builtin_in builtin_nolib snapshot)
 t_removeSources(LINUX _win _macos)
 t_removeSources(APPLE _win _linux)
+t_removeSources(WIN32 _macos _linux _posix)
 t_findDartFiles(bin)
 t_prependDartFiles(bin/builtin.dart) # load first
 t_embedDartFiles(bin/builtin_in.cc)
@@ -89,6 +118,7 @@ t_findSources(vm .cc)
 t_removeSources(ALL  _test _in.cc _api_impl bootstrap.cc bootstrap_nocorelib.cc)
 t_removeSources(LINUX _win _macos)
 t_removeSources(APPLE _win _linux)
+t_removeSources(WIN32 _macos _linux _posix)
 t_makeLibrary()
 
 
@@ -154,10 +184,4 @@ t_addSources(bin/main.cc bin/builtin_nolib.cc)
 t_addSnapshotFile(bin/snapshot_in.cc gen_snapshot)
 t_linkLibraries(dart_corelib)
 t_makeExecutable()
-
-
-
-
-
-
 
