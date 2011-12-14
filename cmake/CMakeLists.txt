@@ -12,6 +12,9 @@ set(LIBRARY_OUTPUT_PATH     ${CMAKE_BINARY_DIR}/lib)
 
 project(dartruntime)
 
+include(TargetClass)
+
+
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE DEBUG)
 endif()
@@ -49,6 +52,9 @@ if(CMAKE_COMPILER_IS_GNUCXX)
 endif()
 
 if(MSVC)
+    if(NOT PYTHONINTERP_FOUND OR NOT openssl)
+		include(WindowsDependencies)
+	endif()
     if(NOT openssl)
         message(FATAL_ERROR "'openssl' not set, install 'Win32OpenSSL' and set openssl")
     endif()
@@ -77,7 +83,6 @@ endif()
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${warn} ${multi} ${lang} ${link}")
 
 
-include(TargetClass)
 t_setTopDir(${CMAKE_SOURCE_DIR}/../runtime)
 
 

@@ -3,7 +3,7 @@
 # BSD-style license that can be found in the LICENSE file.
 
 
-find_package(PythonInterp REQUIRED)
+find_package(PythonInterp)
 
 
 macro(t_setTopDir _dir)
