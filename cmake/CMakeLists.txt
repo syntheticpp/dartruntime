@@ -14,6 +14,14 @@ project(dartruntime)
 
 include(TargetClass)
 
+if(V)
+    set(CMAKE_VERBOSE_MAKEFILE ON)
+    set(verbose ON)
+else()
+    message(STATUS)
+    message(STATUS "Use option '-DV=1' to enable verbose build")
+    message(STATUS)
+endif()
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE DEBUG)
@@ -30,11 +38,13 @@ endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX)
     execute_process(COMMAND ${CMAKE_CXX_COMPILER} -dumpversion OUTPUT_VARIABLE GCC_VERSION)
-    message(STATUS "Using GCC version ${GCC_VERSION}")
+    if(verbose)
+        message(STATUS "Using GCC version ${GCC_VERSION}")
+    endif()
     set(warn  "-Wall -Wextra -Wno-unused-parameter -Wnon-virtual-dtor")
     set(lang  "-ansi -fno-rtti -fno-exceptions")
     set(link  "-fvisibility=hidden -fvisibility-inlines-hidden")
-    if(GCC_VERSION VERSION_LESS 4.6 AND NOT APPLE)
+    if(GCC_VERSION VERSION_LESS 4.6)
         set(warn "${warn} -Werror")
     endif()
     if(NOT GCC_VERSION VERSION_LESS 4.3)
@@ -46,10 +56,12 @@ if(CMAKE_COMPILER_IS_GNUCXX)
     endif()
     if(APPLE)
         set(multi "-arch i386")
+        set(warn "${warn} -Wno-trigraphs -fmessage-length=0")
         set(bin_sub_dir \${CONFIGURATION})
     endif()
     
 endif()
+
 
 if(MSVC)
     if(NOT PYTHONINTERP_FOUND OR NOT openssl)
@@ -82,6 +94,9 @@ endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${warn} ${multi} ${lang} ${link}")
 
+if(verbose)
+    message(STATUS "Used compiler flags: ${CMAKE_CXX_FLAGS}")
+endif()
 
 t_setTopDir(${CMAKE_SOURCE_DIR}/../runtime)
 
@@ -128,16 +143,18 @@ t_makeLibrary()
 
 
 t_init(jscre)
-add_definitions(-DSUPPORT_UTF8 -DSUPPORT_UCP)
 t_findHeaders(third_party/jscre .h)
 t_findSources(third_party/jscre .cpp)
 t_removeSources(ALL ucptable)
+t_addDefinitions(SUPPORT_UTF8 SUPPORT_UCP NO_RECURSE)
+t_addCompileFlags(LINUX -Wno-conversion-null)
 t_makeLibrary()
 
 
 t_init(double_conversion)
 t_findHeaders(third_party/double-conversion/src .h)
 t_findSources(third_party/double-conversion/src .cc)
+t_addCompileFlags(LINUX -Wno-conversion-null)
 t_makeLibrary()
 
 
