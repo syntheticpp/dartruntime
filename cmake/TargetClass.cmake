@@ -20,6 +20,7 @@ macro(t_init _name)
     set(t_dependencies)
     set(t_definitions)
     set(t_compile_flags)
+    set(t_include_dirs)
 endmacro()
 
 
@@ -69,7 +70,14 @@ endmacro()
 
 macro(t_includeDirectories)
     foreach(_it ${ARGN})
-        include_directories(${t_top}/${_it})
+        t_includeDirectoriesAbsolute(${t_top}/${_it})
+    endforeach()
+endmacro()
+
+
+macro(t_includeDirectoriesAbsolute)
+    foreach(_it ${ARGN})
+        set(t_include_dirs "${t_include_dirs} -I${_it}")
     endforeach()
 endmacro()
 
@@ -85,6 +93,7 @@ macro(t_makeLibrary)
     _addDependencies()
     _addDefinitions()
     _addCompileFlags()
+    _includeDirectories()
 endmacro()
 
 
@@ -94,6 +103,7 @@ endmacro()
 
 
 macro(t_makeExecutable)
+    list(SORT t_sources)
     add_executable(${t_name} ${t_sources} ${t_headers})
     set(_libdarts dart_api dart_vm dart_builtin dart_lib)
     if(LINUX OR APPLE)
@@ -104,10 +114,16 @@ macro(t_makeExecutable)
         list(APPEND _libdarts ${t_libraries})
         set(_libplatform ${libopenssl} ws2_32 Rpcrt4)
     endif()
+    if(verbose)
+        foreach(_it ${t_sources})
+            message(STATUS "Building executable '${t_name}' with: ${_it}")
+        endforeach()
+    endif()
     target_link_libraries(${t_name} ${_libdarts} jscre double_conversion ${_libplatform})
     _addDependencies()
     _addDefinitions()
     _addCompileFlags()
+    _includeDirectories()
 endmacro()
 
 
@@ -153,11 +169,18 @@ macro(_addCompileFlags)
     endif()
 endmacro()
 
+macro(_includeDirectories)
+    if(t_include_dirs)
+        set_target_properties(${t_name} PROPERTIES COMPILE_FLAGS ${t_include_dirs})
+        if(verbose)
+            message(STATUS "Target ${t_name}: adding include directories '${t_include_dirs}'")
+        endif()
+    endif()
+endmacro()
 
-macro(createStringLiteralHelper _var _in)
+
+macro(createStringLiteralHelper _var _in _out)
     set(_dart_files ${ARGN})
-    get_filename_component(_file_name ${_in} NAME_WE)
-    set(_out ${CMAKE_CURRENT_BINARY_DIR}/gen_${_file_name}.cc)
     add_custom_command(
         OUTPUT ${_out}
         COMMAND ${PYTHON_EXECUTABLE}
@@ -174,8 +197,8 @@ macro(createStringLiteralHelper _var _in)
 endmacro()
 
 
-macro(t_embedDartFiles _in)
-    createStringLiteralHelper(_gen ${t_top}/${_in} ${t_dart_sources})
+macro(t_embedDartFiles _in _out)
+    createStringLiteralHelper(_gen ${t_top}/${_in} ${_out} ${t_dart_sources})
     list(APPEND t_sources ${_gen})
     set(t_dart_sources)
 endmacro()
@@ -212,10 +235,9 @@ macro(t_findDartFiles _dir)
 endmacro()
 
 
-macro(createSnapshotFile _var _in _exe_name)
-    get_filename_component(_file_name ${_in} NAME_WE)
-    set(_out ${CMAKE_CURRENT_BINARY_DIR}/gen_${_file_name}.cc)
-    set(_bin ${CMAKE_CURRENT_BINARY_DIR}/gen_${_file_name}.bin)
+macro(createSnapshotFile _var _in _out_base _exe_name)
+    set(_out ${_out_base}.cc)
+    set(_bin ${_out_base}.bin)
     set(_exe ${EXECUTABLE_OUTPUT_PATH}/${bin_sub_dir}/${_exe_name})
     add_custom_command(
         OUTPUT ${_out}
@@ -230,8 +252,8 @@ macro(createSnapshotFile _var _in _exe_name)
 endmacro()
 
 
-macro(t_addSnapshotFile _in _exe_name)
-    createSnapshotFile(_gen ${t_top}/${_in} ${_exe_name})
+macro(t_addSnapshotFile _in _out_base _exe_name)
+    createSnapshotFile(_gen ${t_top}/${_in} ${_out_base} ${_exe_name})
     list(APPEND t_sources ${_gen})
     list(APPEND t_dependencies ${_exe_name})
 endmacro()

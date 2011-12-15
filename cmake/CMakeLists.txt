@@ -100,19 +100,21 @@ endif()
 
 t_setTopDir(${CMAKE_SOURCE_DIR}/../runtime)
 
+set(gen_dir ${CMAKE_CURRENT_BINARY_DIR}/gen)
+file(MAKE_DIRECTORY ${gen_dir})
+
 
 #
 # common libraries
 #
 
-t_includeDirectories(.)
-
 t_init(dart_api)
 t_findHeaders(include .h)
 t_addSources(vm/dart_api_impl.cc vm/debugger_api_impl.cc)
+t_includeDirectories(.)
 t_makeLibrary()
 
-
+ 
 t_init(dart_builtin)
 t_findHeaders(bin .h)
 t_findSources(bin .cc)
@@ -122,13 +124,15 @@ t_removeSources(APPLE _win _linux)
 t_removeSources(WIN32 _macos _linux _posix)
 t_findDartFiles(bin)
 t_prependDartFiles(bin/builtin.dart) # load first
-t_embedDartFiles(bin/builtin_in.cc)
+t_embedDartFiles(bin/builtin_in.cc ${gen_dir}/builtin.cc)
+t_includeDirectories(.)
 t_makeLibrary()
 
 
 t_init(dart_lib)
 t_findHeaders(lib .h)
 t_findSources(lib .cc)
+t_includeDirectories(.)
 t_makeLibrary()
 
 
@@ -139,6 +143,7 @@ t_removeSources(ALL  _test _in.cc _api_impl bootstrap.cc bootstrap_nocorelib.cc)
 t_removeSources(LINUX _win _macos)
 t_removeSources(APPLE _win _linux)
 t_removeSources(WIN32 _macos _linux _posix)
+t_includeDirectories(.)
 t_makeLibrary()
 
 
@@ -148,6 +153,7 @@ t_findSources(third_party/jscre .cpp)
 t_removeSources(ALL ucptable)
 t_addDefinitions(SUPPORT_UTF8 SUPPORT_UCP NO_RECURSE)
 t_addCompileFlags(LINUX -Wno-conversion-null)
+t_includeDirectories(.)
 t_makeLibrary()
 
 
@@ -155,6 +161,7 @@ t_init(double_conversion)
 t_findHeaders(third_party/double-conversion/src .h)
 t_findSources(third_party/double-conversion/src .cc)
 t_addCompileFlags(LINUX -Wno-conversion-null)
+t_includeDirectories(.)
 t_makeLibrary()
 
 
@@ -167,7 +174,7 @@ t_init(dart_plain)
 # TODO using bin/main.cc without corelib makes no sense 
 t_addSources(bin/main.cc bin/builtin_nolib.cc bin/snapshot_empty.cc)
 t_addSources(vm/bootstrap_nocorelib.cc)
-t_linkLibraries()
+t_includeDirectories(.)
 t_makeExecutable()
 
 
@@ -181,29 +188,55 @@ t_addSources(vm/bootstrap.cc)
 t_findDartFiles(../corelib/src)
 set(for_corelib_in lib/byte_buffer.dart lib/clock.dart lib/error.dart lib/literal_factory.dart lib/object.dart)
 t_addDartFiles(${for_corelib_in})
-t_embedDartFiles(vm/corelib_in.cc)
+t_embedDartFiles(vm/corelib_in.cc ${gen_dir}/corelib.cc)
 t_findDartFiles(lib)
 t_removeDartFiles(${for_corelib_in})
 t_findDartFiles(../corelib/src/implementation)
-t_embedDartFiles(vm/corelib_impl_in.cc)
+t_embedDartFiles(vm/corelib_impl_in.cc ${gen_dir}/corelib_impl.cc)
+t_includeDirectories(.)
 t_makeLibrary()
   
 
 t_init(dart_no_snapshot)
 t_addSources(bin/main.cc bin/builtin.cc bin/snapshot_empty.cc)
 t_linkLibraries(dart_corelib)
+t_includeDirectories(.)
 t_makeExecutable()
 
 
 t_init(gen_snapshot)
 t_addSources(bin/gen_snapshot.cc bin/builtin.cc)
 t_linkLibraries(dart_corelib)
+t_includeDirectories(.)
 t_makeExecutable()
 
         
 t_init(dart)
 t_addSources(bin/main.cc bin/builtin_nolib.cc)
-t_addSnapshotFile(bin/snapshot_in.cc gen_snapshot)
+t_addSnapshotFile(bin/snapshot_in.cc ${gen_dir}/snapshot_gen gen_snapshot)
+t_linkLibraries(dart_corelib)
+t_includeDirectories(.)
+t_makeExecutable()
+
+
+#
+# test
+#
+
+t_init(run_vm_tests)
+t_findSources(vm _test.cc)
+t_findSources(bin _test.cc)
+t_addSources(bin/run_vm_tests.cc)
+t_removeSources(ALL process_test )
+t_addDartFiles(vm/snapshot_test.dart)
+t_embedDartFiles(vm/snapshot_test_in.dat ${gen_dir}/snapshot_gen snapshot_test.dat)
+t_includeDirectoriesAbsolute(${gen_dir})
+t_includeDirectories(. vm)
+t_addDefinitions(TESTING)
 t_linkLibraries(dart_corelib)
 t_makeExecutable()
+
+
+
+
 
