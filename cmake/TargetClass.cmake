@@ -7,7 +7,7 @@ find_package(PythonInterp)
 
 
 macro(t_setTopDir _dir)
-    set(t_top ${_dir})
+    get_filename_component(t_top ${_dir} ABSOLUTE)
 endmacro()
 
 

@@ -237,6 +237,12 @@ t_linkLibraries(dart_corelib)
 t_makeExecutable()
 
 
+message(STATUS)
+get_filename_component(rep_root ${t_top}/.. ABSOLUTE)
+message(STATUS "Run tests from the source folder: '${rep_root}' !")
+message(STATUS)
+
+
 
 
 
