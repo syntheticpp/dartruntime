@@ -14,10 +14,13 @@ xcodebuild
 /client/samples/swarm/appengine/oauth2client/
 
 # Build output directories
+/build/
 out/
 war/
 bin/
 client/outcode/
+# but runtime/bin contains source code!
+!/runtime/bin
 
 # Swarm sample app output directory
 /client/outcode
