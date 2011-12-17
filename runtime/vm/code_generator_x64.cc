@@ -2,8 +2,8 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-#include "vm/globals.h"  // Needed here to get TARGET_ARCH_IA32.
-#if defined(TARGET_ARCH_IA32)
+#include "vm/globals.h"  // Needed here to get TARGET_ARCH_X64.
+#if defined(TARGET_ARCH_X64)
 
 #include "vm/code_generator.h"
 
@@ -32,6 +32,11 @@ DECLARE_FLAG(bool, report_invocation_count);
 DECLARE_FLAG(bool, trace_compiler);
 
 #define __ assembler_->
+
+
+// TODO(regis): CodeGeneratorState, CodeGenerator::DescriptorList, and
+// CodeGenerator::HandlerList can probably be moved to code_generator.cc, since
+// they seem to be architecture independent.
 
 
 CodeGeneratorState::CodeGeneratorState(CodeGenerator* codegen)
@@ -196,8 +201,8 @@ bool CodeGenerator::IsResultNeeded(AstNode* node) const {
 }
 
 
-// NOTE: First 5 bytes of the code may be patched with a jump instruction. Do
-// not emit any objects in the first 5 bytes.
+// NOTE: First 13 bytes of the code may be patched with a jump instruction. Do
+// not emit any objects in the first 13 bytes.
 void CodeGenerator::GenerateCode() {
   CodeGeneratorState codegen_state(this);
   if (FLAG_print_scopes && FLAG_print_ast) {
@@ -209,20 +214,20 @@ void CodeGenerator::GenerateCode() {
     AstPrinter::PrintFunctionNodes(parsed_function_);
   }
   if (FLAG_trace_functions) {
-    // Preserve ECX (ic-data array or object) and EDX (arguments descriptor).
-    __ nop(2);  // Make sure the code is patchable.
-    __ pushl(ECX);
-    __ pushl(EDX);
+    // Preserve RBX (ic-data array or object) and R10 (arguments descriptor).
+    __ nop(8);
+    __ pushq(RBX);
+    __ pushq(R10);
     const Function& function =
         Function::ZoneHandle(parsed_function_.function().raw());
-    __ LoadObject(EAX, function);
-    __ pushl(EAX);
+    __ LoadObject(RAX, function);
+    __ pushq(RAX);
     GenerateCallRuntime(AstNode::kNoId,
                         0,
                         kTraceFunctionEntryRuntimeEntry);
-    __ popl(EAX);
-    __ popl(EDX);
-    __ popl(ECX);
+    __ popq(RAX);
+    __ popq(R10);
+    __ popq(RBX);
   }
 
   const bool code_generation_finished = TryIntrinsify();
@@ -248,7 +253,7 @@ void CodeGenerator::GenerateCode() {
   __ int3();
   GenerateDeferredCode();
 
-  // Emit function patching code. This will be swapped with the first 5 bytes
+  // Emit function patching code. This will be swapped with the first 13 bytes
   // at entry point.
   pc_descriptors_list_->AddDescriptor(PcDescriptors::kPatchCode,
                                       assembler_->CodeSize(),
@@ -268,9 +273,9 @@ void CodeGenerator::GenerateDeferredCode() {
 // - optionally count function invocations.
 // - optionally trigger optimizing compiler if invocation threshold has been
 //   reached.
-// Note that first 5 bytes may be patched with a jump.
+// Note that first 13 bytes may be patched with a jump.
 // TODO(srdjan): Add check that no object is inlined in the first
-// 5 bytes (length of a jump instruction).
+// 13 bytes (length of a jump instruction).
 void CodeGenerator::GeneratePreEntryCode() {
   // Do not optimize if:
   // - we count invocations.
@@ -286,17 +291,18 @@ void CodeGenerator::GeneratePreEntryCode() {
   if (FLAG_report_invocation_count || may_optimize) {
     // TODO(turnidge): It would be nice to remove this nop.  Right now
     // we need it to make sure the function is still patchable.
+    __ nop(8);
     __ nop(5);
     const Function& function =
         Function::ZoneHandle(parsed_function_.function().raw());
-    __ LoadObject(EAX, function);
-    __ movl(EBX, FieldAddress(EAX, Function::invocation_counter_offset()));
-    __ incl(EBX);
+    __ LoadObject(RAX, function);
+    __ movq(R8, FieldAddress(RAX, Function::invocation_counter_offset()));
+    __ incq(R8);
     if (may_optimize) {
-      __ cmpl(EBX, Immediate(FLAG_optimization_invocation_threshold));
+      __ cmpq(R8, Immediate(FLAG_optimization_invocation_threshold));
       __ j(GREATER, &StubCode::OptimizeInvokedFunctionLabel());
     }
-    __ movl(FieldAddress(EAX, Function::invocation_counter_offset()), EBX);
+    __ movq(FieldAddress(RAX, Function::invocation_counter_offset()), R8);
   }
 }
 
@@ -369,14 +375,14 @@ void CodeGenerator::GenerateLoadVariable(Register dst,
     ASSERT(delta >= 0);
     Register base = CTX;
     while (delta-- > 0) {
-      __ movl(dst, FieldAddress(base, Context::parent_offset()));
+      __ movq(dst, FieldAddress(base, Context::parent_offset()));
       base = dst;
     }
-    __ movl(dst,
+    __ movq(dst,
             FieldAddress(base, Context::variable_offset(variable.index())));
   } else {
     // The variable lives in the current stack frame.
-    __ movl(dst, Address(EBP, variable.index() * kWordSize));
+    __ movq(dst, Address(RBP, variable.index() * kWordSize));
   }
 }
 
@@ -390,14 +396,14 @@ void CodeGenerator::GenerateStoreVariable(const LocalVariable& variable,
     ASSERT(delta >= 0);
     Register base = CTX;
     while (delta-- > 0) {
-      __ movl(scratch, FieldAddress(base, Context::parent_offset()));
+      __ movq(scratch, FieldAddress(base, Context::parent_offset()));
       base = scratch;
     }
-    __ movl(FieldAddress(base, Context::variable_offset(variable.index())),
+    __ movq(FieldAddress(base, Context::variable_offset(variable.index())),
             src);
   } else {
     // The variable lives in the current stack frame.
-    __ movl(Address(EBP, variable.index() * kWordSize), src);
+    __ movq(Address(RBP, variable.index() * kWordSize), src);
   }
 }
 
@@ -410,13 +416,13 @@ void CodeGenerator::GeneratePushVariable(const LocalVariable& variable,
     ASSERT(delta >= 0);
     Register base = CTX;
     while (delta-- > 0) {
-      __ movl(scratch, FieldAddress(base, Context::parent_offset()));
+      __ movq(scratch, FieldAddress(base, Context::parent_offset()));
       base = scratch;
     }
-    __ pushl(FieldAddress(base, Context::variable_offset(variable.index())));
+    __ pushq(FieldAddress(base, Context::variable_offset(variable.index())));
   } else {
     // The variable lives in the current stack frame.
-    __ pushl(Address(EBP, variable.index() * kWordSize));
+    __ pushq(Address(RBP, variable.index() * kWordSize));
   }
 }
 
@@ -433,9 +439,8 @@ void CodeGenerator::GenerateInstanceCall(
   // to the InstanceCall stub which will resolve the correct entrypoint for
   // the operator and call it.
   ICData ic_data(function_name, num_args_checked);
-  ASSERT(ic_data.NumberOfArgumentsChecked() == num_args_checked);
-  __ LoadObject(ECX, Array::ZoneHandle(ic_data.data()));
-  __ LoadObject(EDX, ArgumentsDescriptor(num_arguments,
+  __ LoadObject(RBX, Array::ZoneHandle(ic_data.data()));
+  __ LoadObject(R10, ArgumentsDescriptor(num_arguments,
                                          optional_arguments_names));
   uword label_address = 0;
   switch (num_args_checked) {
@@ -454,7 +459,7 @@ void CodeGenerator::GenerateInstanceCall(
   AddCurrentDescriptor(PcDescriptors::kIcCall,
                        node_id,
                        token_index);
-  __ addl(ESP, Immediate(num_arguments * kWordSize));
+  __ addq(RSP, Immediate(num_arguments * kWordSize));
 }
 
 
@@ -465,10 +470,10 @@ void CodeGenerator::GenerateInstanceCall(
 // - initialize all non-argument locals to null.
 //
 // Input parameters:
-//   ESP : points to return address.
-//   ESP + 4 : address of last argument (arg n-1).
-//   ESP + 4*n : address of first argument (arg 0).
-//   EDX : arguments descriptor array.
+//   RSP : points to return address.
+//   RSP + 8 : address of last argument (arg n-1).
+//   RSP + 8*n : address of first argument (arg 0).
+//   R10 : arguments descriptor array.
 void CodeGenerator::GenerateEntryCode() {
   const Immediate raw_null =
       Immediate(reinterpret_cast<intptr_t>(Object::null()));
@@ -532,14 +537,14 @@ void CodeGenerator::GenerateEntryCode() {
     if (check_arguments) {
       // Check that num_fixed <= argc <= num_params.
       Label argc_in_range;
-      // Total number of args is the first Smi in args descriptor array (EDX).
-      __ movl(EAX, FieldAddress(EDX, Array::data_offset()));
+      // Total number of args is the first Smi in args descriptor array (R10).
+      __ movq(RAX, FieldAddress(R10, Array::data_offset()));
       if (num_opt_params == 0) {
-        __ cmpl(EAX, Immediate(Smi::RawValue(num_fixed_params)));
+        __ cmpq(RAX, Immediate(Smi::RawValue(num_fixed_params)));
         __ j(EQUAL, &argc_in_range, Assembler::kNearJump);
       } else {
-        __ subl(EAX, Immediate(Smi::RawValue(num_fixed_params)));
-        __ cmpl(EAX, Immediate(Smi::RawValue(num_opt_params)));
+        __ subq(RAX, Immediate(Smi::RawValue(num_fixed_params)));
+        __ cmpq(RAX, Immediate(Smi::RawValue(num_opt_params)));
         __ j(BELOW_EQUAL, &argc_in_range, Assembler::kNearJump);
       }
       if (function.IsClosureFunction()) {
@@ -558,40 +563,40 @@ void CodeGenerator::GenerateEntryCode() {
     // in and that no more than num_params arguments are passed in.
     // Passed argument i at fp[1 + argc - i] copied to fp[-1 - i].
 
-    // Total number of args is the first Smi in args descriptor array (EDX).
-    __ movl(EBX, FieldAddress(EDX, Array::data_offset()));
+    // Total number of args is the first Smi in args descriptor array (R10).
+    __ movq(RBX, FieldAddress(R10, Array::data_offset()));
     // Check that num_args <= num_params.
     Label wrong_num_arguments;
-    __ cmpl(EBX, Immediate(Smi::RawValue(num_params)));
+    __ cmpq(RBX, Immediate(Smi::RawValue(num_params)));
     __ j(GREATER, &wrong_num_arguments);
-    // Number of positional args is the second Smi in descriptor array (EDX).
-    __ movl(ECX, FieldAddress(EDX, Array::data_offset() + (1 * kWordSize)));
+    // Number of positional args is the second Smi in descriptor array (R10).
+    __ movq(RCX, FieldAddress(R10, Array::data_offset() + (1 * kWordSize)));
     // Check that num_pos_args >= num_fixed_params.
-    __ cmpl(ECX, Immediate(Smi::RawValue(num_fixed_params)));
+    __ cmpq(RCX, Immediate(Smi::RawValue(num_fixed_params)));
     __ j(LESS, &wrong_num_arguments);
-    // Since EBX and ECX are Smi, use TIMES_2 instead of TIMES_4.
-    // Let EBX point to the last passed positional argument, i.e. to
+    // Since RBX and RCX are Smi, use TIMES_4 instead of TIMES_8.
+    // Let RBX point to the last passed positional argument, i.e. to
     // fp[1 + num_args - (num_pos_args - 1)].
-    __ subl(EBX, ECX);
-    __ leal(EBX, Address(EBP, EBX, TIMES_2, 2 * kWordSize));
-    // Let EDI point to the last copied positional argument, i.e. to
+    __ subq(RBX, RCX);
+    __ leaq(RBX, Address(RBP, RBX, TIMES_4, 2 * kWordSize));
+    // Let RDI point to the last copied positional argument, i.e. to
     // fp[-1 - (num_pos_args - 1)].
-    __ movl(EDI, EBP);
-    __ subl(EDI, ECX);  // ECX is a Smi, subtract twice for TIMES_4 scaling.
-    __ subl(EDI, ECX);
-    __ SmiUntag(ECX);
+    __ SmiUntag(RCX);
+    __ movq(RAX, RCX);
+    __ negq(RAX);
+    __ leaq(RDI, Address(RBP, RAX, TIMES_8, 0));
     Label loop, loop_condition;
     __ jmp(&loop_condition, Assembler::kNearJump);
     // We do not use the final allocation index of the variable here, i.e.
     // scope->VariableAt(i)->index(), because captured variables still need
     // to be copied to the context that is not yet allocated.
-    const Address argument_addr(EBX, ECX, TIMES_4, 0);
-    const Address copy_addr(EDI, ECX, TIMES_4, 0);
+    const Address argument_addr(RBX, RCX, TIMES_8, 0);
+    const Address copy_addr(RDI, RCX, TIMES_8, 0);
     __ Bind(&loop);
-    __ movl(EAX, argument_addr);
-    __ movl(copy_addr, EAX);
+    __ movq(RAX, argument_addr);
+    __ movq(copy_addr, RAX);
     __ Bind(&loop_condition);
-    __ decl(ECX);
+    __ decq(RCX);
     __ j(POSITIVE, &loop, Assembler::kNearJump);
 
     // Copy or initialize optional named arguments.
@@ -615,55 +620,55 @@ void CodeGenerator::GenerateEntryCode() {
       opt_param_position[i + 1] = pos;
     }
     // Generate code handling each optional parameter in alphabetical order.
-    // Total number of args is the first Smi in args descriptor array (EDX).
-    __ movl(EBX, FieldAddress(EDX, Array::data_offset()));
-    // Number of positional args is the second Smi in descriptor array (EDX).
-    __ movl(ECX, FieldAddress(EDX, Array::data_offset() + (1 * kWordSize)));
-    __ SmiUntag(ECX);
-    // Let EBX point to the first passed argument, i.e. to fp[1 + argc - 0].
-    __ leal(EBX, Address(EBP, EBX, TIMES_2, kWordSize));
+    // Total number of args is the first Smi in args descriptor array (R10).
+    __ movq(RBX, FieldAddress(R10, Array::data_offset()));
+    // Number of positional args is the second Smi in descriptor array (R10).
+    __ movq(RCX, FieldAddress(R10, Array::data_offset() + (1 * kWordSize)));
+    __ SmiUntag(RCX);
+    // Let RBX point to the first passed argument, i.e. to fp[1 + argc - 0].
+    __ leaq(RBX, Address(RBP, RBX, TIMES_4, kWordSize));  // RBX is Smi.
     // Let EDI point to the name/pos pair of the first named argument.
-    __ leal(EDI, FieldAddress(EDX, Array::data_offset() + (2 * kWordSize)));
+    __ leaq(RDI, FieldAddress(R10, Array::data_offset() + (2 * kWordSize)));
     for (int i = 0; i < num_opt_params; i++) {
       // Handle this optional parameter only if k or fewer positional arguments
       // have been passed, where k is the position of this optional parameter in
       // the formal parameter list.
       Label load_default_value, assign_optional_parameter, next_parameter;
       const int param_pos = opt_param_position[i];
-      __ cmpl(ECX, Immediate(param_pos));
+      __ cmpq(RCX, Immediate(param_pos));
       __ j(GREATER, &next_parameter, Assembler::kNearJump);
       // Check if this named parameter was passed in.
-      __ movl(EAX, Address(EDI, 0));  // Load EAX with the name of the argument.
-      __ CompareObject(EAX, opt_param[i]->name());
+      __ movq(RAX, Address(RDI, 0));  // Load RAX with the name of the argument.
+      __ CompareObject(RAX, opt_param[i]->name());
       __ j(NOT_EQUAL, &load_default_value, Assembler::kNearJump);
-      // Load EAX with passed-in argument at provided arg_pos, i.e. at
+      // Load RAX with passed-in argument at provided arg_pos, i.e. at
       // fp[1 + argc - arg_pos].
-      __ movl(EAX, Address(EDI, kWordSize));  // EAX is arg_pos as Smi.
-      __ addl(EDI, Immediate(2 * kWordSize));  // Point to next name/pos pair.
-      __ negl(EAX);
-      Address argument_addr(EBX, EAX, TIMES_2, 0);  // EAX is a negative Smi.
-      __ movl(EAX, argument_addr);
+      __ movq(RAX, Address(RDI, kWordSize));  // RAX is arg_pos as Smi.
+      __ addq(RDI, Immediate(2 * kWordSize));  // Point to next name/pos pair.
+      __ negq(RAX);
+      Address argument_addr(RBX, RAX, TIMES_4, 0);  // RAX is a negative Smi.
+      __ movq(RAX, argument_addr);
       __ jmp(&assign_optional_parameter, Assembler::kNearJump);
       __ Bind(&load_default_value);
-      // Load EAX with default argument at pos.
+      // Load RAX with default argument at pos.
       const Object& value = Object::ZoneHandle(
           parsed_function_.default_parameter_values().At(
               param_pos - num_fixed_params));
-      __ LoadObject(EAX, value);
+      __ LoadObject(RAX, value);
       __ Bind(&assign_optional_parameter);
-      // Assign EAX to fp[-1 - param_pos].
+      // Assign RAX to fp[-1 - param_pos].
       // We do not use the final allocation index of the variable here, i.e.
       // scope->VariableAt(i)->index(), because captured variables still need
       // to be copied to the context that is not yet allocated.
-      const Address param_addr(EBP, (-1 - param_pos) * kWordSize);
-      __ movl(param_addr, EAX);
+      const Address param_addr(RBP, (-1 - param_pos) * kWordSize);
+      __ movq(param_addr, RAX);
       __ Bind(&next_parameter);
     }
     delete[] opt_param;
     delete[] opt_param_position;
-    // Check that EDI now points to the null terminator in the array descriptor.
+    // Check that RDI now points to the null terminator in the array descriptor.
     Label all_arguments_processed;
-    __ cmpl(Address(EDI, 0), raw_null);
+    __ cmpq(Address(RDI, 0), raw_null);
     __ j(EQUAL, &all_arguments_processed, Assembler::kNearJump);
 
     __ Bind(&wrong_num_arguments);
@@ -674,24 +679,24 @@ void CodeGenerator::GenerateEntryCode() {
     } else {
       // Invoke noSuchMethod function.
       ICData ic_data(String::Handle(function.name()), 1);
-      __ LoadObject(ECX, Array::ZoneHandle(ic_data.data()));
-      // EBP : points to previous frame pointer.
-      // EBP + 4 : points to return address.
-      // EBP + 8 : address of last argument (arg n-1).
-      // ESP + 8 + 4*(n-1) : address of first argument (arg 0).
-      // ECX : ic-data array.
-      // EDX : arguments descriptor array.
+      __ LoadObject(RBX, Array::ZoneHandle(ic_data.data()));
+      // RBP : points to previous frame pointer.
+      // RBP + 8 : points to return address.
+      // RBP + 16 : address of last argument (arg n-1).
+      // RSP + 16 + 8*(n-1) : address of first argument (arg 0).
+      // RBX : ic-data array.
+      // R10 : arguments descriptor array.
       __ call(&StubCode::CallNoSuchMethodFunctionLabel());
     }
 
     if (FLAG_trace_functions) {
-      __ pushl(EAX);  // Preserve result.
+      __ pushq(RAX);  // Preserve result.
       __ PushObject(function);
       GenerateCallRuntime(AstNode::kNoId,
                           0,
                           kTraceFunctionExitRuntimeEntry);
-      __ popl(EAX);  // Remove argument.
-      __ popl(EAX);  // Restore result.
+      __ popq(RAX);  // Remove argument.
+      __ popq(RAX);  // Restore result.
     }
     __ LeaveFrame();
     __ ret();
@@ -703,17 +708,17 @@ void CodeGenerator::GenerateEntryCode() {
     // implicitly final, since garbage collecting the unmodified value is not
     // an issue anymore.
 
-    // EDX : arguments descriptor array.
-    // Total number of args is the first Smi in args descriptor array (EDX).
-    __ movl(ECX, FieldAddress(EDX, Array::data_offset()));
-    __ SmiUntag(ECX);
+    // R10 : arguments descriptor array.
+    // Total number of args is the first Smi in args descriptor array (R10).
+    __ movq(RCX, FieldAddress(R10, Array::data_offset()));
+    __ SmiUntag(RCX);
     Label null_args_loop, null_args_loop_condition;
     __ jmp(&null_args_loop_condition, Assembler::kNearJump);
-    const Address original_argument_addr(EBP, ECX, TIMES_4, 2 * kWordSize);
+    const Address original_argument_addr(RBP, RCX, TIMES_8, 2 * kWordSize);
     __ Bind(&null_args_loop);
-    __ movl(original_argument_addr, raw_null);
+    __ movq(original_argument_addr, raw_null);
     __ Bind(&null_args_loop_condition);
-    __ decl(ECX);
+    __ decq(RCX);
     __ j(POSITIVE, &null_args_loop, Assembler::kNearJump);
   }
 
@@ -723,14 +728,14 @@ void CodeGenerator::GenerateEntryCode() {
   // Consider emitting pushes instead of moves.
   for (int index = first_local_index; index > first_free_frame_index; index--) {
     if (index == first_local_index) {
-      __ movl(EAX, raw_null);
+      __ movq(RAX, raw_null);
     }
-    __ movl(Address(EBP, index * kWordSize), EAX);
+    __ movq(Address(RBP, index * kWordSize), RAX);
   }
 
   // Generate stack overflow check.
-  __ cmpl(ESP,
-          Address::Absolute(Isolate::Current()->stack_limit_address()));
+  __ movq(TMP, Immediate(Isolate::Current()->stack_limit_address()));
+  __ cmpq(RSP, Address(TMP, 0));
   Label no_stack_overflow;
   __ j(ABOVE, &no_stack_overflow);
   GenerateCallRuntime(AstNode::kNoId,
@@ -745,29 +750,29 @@ void CodeGenerator::GenerateReturnEpilog() {
   int context_level = state()->context_level();
   ASSERT(context_level >= 0);
   while (context_level-- > 0) {
-    __ movl(CTX, FieldAddress(CTX, Context::parent_offset()));
+    __ movq(CTX, FieldAddress(CTX, Context::parent_offset()));
   }
 #ifdef DEBUG
   // Check that the entry stack size matches the exit stack size.
-  __ movl(EDX, EBP);
-  __ subl(EDX, ESP);
+  __ movq(R10, RBP);
+  __ subq(R10, RSP);
   ASSERT(locals_space_size() >= 0);
-  __ cmpl(EDX, Immediate(locals_space_size()));
+  __ cmpq(R10, Immediate(locals_space_size()));
   Label wrong_stack;
   __ j(NOT_EQUAL, &wrong_stack, Assembler::kNearJump);
 #endif  // DEBUG.
 
   if (FLAG_trace_functions) {
-    __ pushl(EAX);  // Preserve result.
+    __ pushq(RAX);  // Preserve result.
     const Function& function =
         Function::ZoneHandle(parsed_function_.function().raw());
-    __ LoadObject(EBX, function);
-    __ pushl(EBX);
+    __ LoadObject(RBX, function);
+    __ pushq(RBX);
     GenerateCallRuntime(AstNode::kNoId,
                         0,
                         kTraceFunctionExitRuntimeEntry);
-    __ popl(EAX);  // Remove argument.
-    __ popl(EAX);  // Restore result.
+    __ popq(RAX);  // Remove argument.
+    __ popq(RAX);  // Restore result.
   }
   __ LeaveFrame();
   __ ret();
@@ -795,16 +800,16 @@ void CodeGenerator::VisitReturnNode(ReturnNode* node) {
   }
 
   if (node->value()->IsLiteralNode()) {
-    // Load literal value into EAX.
+    // Load literal value into RAX.
     const Object& literal = node->value()->AsLiteralNode()->literal();
     if (literal.IsSmi()) {
-      __ movl(EAX, Immediate(reinterpret_cast<int32_t>(literal.raw())));
+      __ movq(RAX, Immediate(reinterpret_cast<int64_t>(literal.raw())));
     } else {
-      __ LoadObject(EAX, literal);
+      __ LoadObject(RAX, literal);
     }
   } else {
-    // Pop the previously evaluated result value into EAX.
-    __ popl(EAX);
+    // Pop the previously evaluated result value into RAX.
+    __ popq(RAX);
   }
 
   // Generate type check.
@@ -839,13 +844,13 @@ void CodeGenerator::VisitTypeNode(TypeNode* node) {
 void CodeGenerator::VisitAssignableNode(AssignableNode* node) {
   ASSERT(FLAG_enable_type_checks);
   node->expr()->Visit(this);
-  __ popl(EAX);
+  __ popq(RAX);
   GenerateAssertAssignable(node->id(),
                            node->token_index(),
                            node->type(),
                            node->dst_name());
   if (IsResultNeeded(node)) {
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
 }
 
@@ -879,13 +884,13 @@ void CodeGenerator::VisitClosureNode(ClosureNode* node) {
   const ExternalLabel label(function.ToCString(), stub.EntryPoint());
   GenerateCall(node->token_index(), &label);
   if (requires_type_arguments) {
-    __ popl(ECX);  // Pop type arguments.
+    __ popq(RCX);  // Pop type arguments.
   }
   if (function.IsImplicitInstanceClosureFunction()) {
-    __ popl(ECX);  // Pop receiver.
+    __ popq(RCX);  // Pop receiver.
   }
   if (IsResultNeeded(node)) {
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
 }
 
@@ -900,11 +905,11 @@ void CodeGenerator::VisitPrimaryNode(PrimaryNode* node) {
 void CodeGenerator::VisitCloneContextNode(CloneContextNode *node) {
   const Context& result = Context::ZoneHandle();
   __ PushObject(result);
-  __ pushl(CTX);
+  __ pushq(CTX);
   GenerateCallRuntime(node->id(),
       node->token_index(), kCloneContextRuntimeEntry);
-  __ popl(EAX);
-  __ popl(CTX);  // result: cloned context. Set as current context.
+  __ popq(RAX);
+  __ popq(CTX);  // result: cloned context. Set as current context.
 }
 
 
@@ -916,15 +921,15 @@ void CodeGenerator::VisitSequenceNode(SequenceNode* node_sequence) {
   if (num_context_variables > 0) {
     // The loop local scope declares variables that are captured.
     // Allocate and chain a new context.
-    __ movl(EDX, Immediate(num_context_variables));
+    __ movq(R10, Immediate(num_context_variables));
     const ExternalLabel label("alloc_context",
                               StubCode::AllocateContextEntryPoint());
     GenerateCall(node_sequence->token_index(), &label);
 
-    // Chain the new context in EAX to its parent in CTX.
-    __ movl(FieldAddress(EAX, Context::parent_offset()), CTX);
+    // Chain the new context in RAX to its parent in CTX.
+    __ movq(FieldAddress(RAX, Context::parent_offset()), CTX);
     // Set new context as current context.
-    __ movl(CTX, EAX);
+    __ movq(CTX, RAX);
     state()->set_context_level(scope->context_level());
 
     // If this node_sequence is the body of the function being compiled, copy
@@ -942,13 +947,13 @@ void CodeGenerator::VisitSequenceNode(SequenceNode* node_sequence) {
         ASSERT(parameter->owner() == scope);
         if (parameter->is_captured()) {
           // Copy parameter from local frame to current context.
-          const Address local_addr(EBP, param_frame_index * kWordSize);
-          __ movl(EAX, local_addr);
-          GenerateStoreVariable(*parameter, EAX, EDX);
+          const Address local_addr(RBP, param_frame_index * kWordSize);
+          __ movq(RAX, local_addr);
+          GenerateStoreVariable(*parameter, RAX, R10);
           // Write NULL to the source location to detect buggy accesses and
           // allow GC of passed value if it gets overwritten by a new value in
           // the function.
-          __ movl(local_addr, raw_null);
+          __ movq(local_addr, raw_null);
         }
       }
     }
@@ -969,7 +974,7 @@ void CodeGenerator::VisitSequenceNode(SequenceNode* node_sequence) {
   }
   if (num_context_variables > 0) {
     // Unchain the previously allocated context.
-    __ movl(CTX, FieldAddress(CTX, Context::parent_offset()));
+    __ movq(CTX, FieldAddress(CTX, Context::parent_offset()));
   }
 }
 
@@ -990,22 +995,22 @@ void CodeGenerator::VisitArrayNode(ArrayNode* node) {
   }
 
   // Allocate the array.
-  //   EDX : Array length as Smi.
-  //   ECX : element type for the array.
-  __ movl(EDX, Immediate(Smi::RawValue(node->length())));
+  //   R10 : Array length as Smi.
+  //   RBX : element type for the array.
+  __ movq(R10, Immediate(Smi::RawValue(node->length())));
   const AbstractTypeArguments& element_type = node->type_arguments();
   ASSERT(element_type.IsNull() || element_type.IsInstantiated());
-  __ LoadObject(ECX, element_type);
+  __ LoadObject(RBX, element_type);
   GenerateCall(node->token_index(), &StubCode::AllocateArrayLabel());
 
   // Pop the element values from the stack into the array.
-  __ leal(ECX, FieldAddress(EAX, Array::data_offset()));
+  __ leaq(RCX, FieldAddress(RAX, Array::data_offset()));
   for (int i = node->length() - 1; i >= 0; i--) {
-    __ popl(Address(ECX, i * kWordSize));
+    __ popq(Address(RCX, i * kWordSize));
   }
 
   if (IsResultNeeded(node)) {
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
 }
 
@@ -1013,23 +1018,23 @@ void CodeGenerator::VisitArrayNode(ArrayNode* node) {
 void CodeGenerator::VisitLoadLocalNode(LoadLocalNode* node) {
   // Load the value of the local variable and push it onto the expression stack.
   if (IsResultNeeded(node)) {
-    GeneratePushVariable(node->local(), EAX);
+    GeneratePushVariable(node->local(), RAX);
   }
 }
 
 
 void CodeGenerator::VisitStoreLocalNode(StoreLocalNode* node) {
   node->value()->Visit(this);
-  __ popl(EAX);
+  __ popq(RAX);
   if (FLAG_enable_type_checks) {
     GenerateAssertAssignable(node->id(),
                              node->value()->token_index(),
                              node->local().type(),
                              node->local().name());
   }
-  GenerateStoreVariable(node->local(), EAX, EDX);
+  GenerateStoreVariable(node->local(), RAX, R10);
   if (IsResultNeeded(node)) {
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
 }
 
@@ -1037,10 +1042,10 @@ void CodeGenerator::VisitStoreLocalNode(StoreLocalNode* node) {
 void CodeGenerator::VisitLoadInstanceFieldNode(LoadInstanceFieldNode* node) {
   node->instance()->Visit(this);
   MarkDeoptPoint(node->id(), node->token_index());
-  __ popl(EAX);  // Instance.
-  __ movl(EAX, FieldAddress(EAX, node->field().Offset()));
+  __ popq(RAX);  // Instance.
+  __ movq(RAX, FieldAddress(RAX, node->field().Offset()));
   if (IsResultNeeded(node)) {
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
 }
 
@@ -1049,23 +1054,23 @@ void CodeGenerator::VisitStoreInstanceFieldNode(StoreInstanceFieldNode* node) {
   node->instance()->Visit(this);
   node->value()->Visit(this);
   MarkDeoptPoint(node->id(), node->token_index());
-  __ popl(EAX);  // Value.
+  __ popq(RAX);  // Value.
   if (FLAG_enable_type_checks) {
     GenerateAssertAssignable(node->id(),
                              node->value()->token_index(),
                              AbstractType::ZoneHandle(node->field().type()),
                              String::ZoneHandle(node->field().name()));
   }
-  __ popl(EDX);  // Instance.
-  __ StoreIntoObject(EDX, FieldAddress(EDX, node->field().Offset()), EAX);
+  __ popq(R10);  // Instance.
+  __ StoreIntoObject(R10, FieldAddress(R10, node->field().Offset()), RAX);
   if (IsResultNeeded(node)) {
     // The result is the input value.
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
 }
 
 
-// Expects array and index on stack and returns result in EAX.
+// Expects array and index on stack and returns result in RAX.
 void CodeGenerator::GenerateLoadIndexed(intptr_t node_id,
                                         intptr_t token_index) {
   // Invoke the [] operator on the receiver object with the index as argument.
@@ -1089,9 +1094,9 @@ void CodeGenerator::VisitLoadIndexedNode(LoadIndexedNode* node) {
   node->index_expr()->Visit(this);
   MarkDeoptPoint(node->id(), node->token_index());
   GenerateLoadIndexed(node->id(), node->token_index());
-  // Result is in EAX.
+  // Result is in RAX.
   if (IsResultNeeded(node)) {
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
 }
 
@@ -1106,13 +1111,13 @@ void CodeGenerator::GenerateStoreIndexed(intptr_t node_id,
   // It is not necessary to generate a type test of the assigned value here,
   // because the []= operator will check the type of its incoming arguments.
   if (preserve_value) {
-    __ popl(EAX);
-    __ popl(EDX);
-    __ popl(ECX);
-    __ pushl(EAX);  // Preserve stored value.
-    __ pushl(ECX);  // Restore arguments.
-    __ pushl(EDX);
-    __ pushl(EAX);
+    __ popq(RAX);
+    __ popq(RDX);
+    __ popq(RCX);
+    __ pushq(RAX);  // Preserve stored value.
+    __ pushq(RCX);  // Restore arguments.
+    __ pushq(RDX);
+    __ pushq(RAX);
   }
   // Invoke the []= operator on the receiver object with index and
   // value as arguments.
@@ -1144,10 +1149,10 @@ void CodeGenerator::VisitStoreIndexedNode(StoreIndexedNode* node) {
 
 void CodeGenerator::VisitLoadStaticFieldNode(LoadStaticFieldNode* node) {
   MarkDeoptPoint(node->id(), node->token_index());
-  __ LoadObject(EDX, node->field());
-  __ movl(EAX, FieldAddress(EDX, Field::value_offset()));
+  __ LoadObject(RDX, node->field());
+  __ movq(RAX, FieldAddress(RDX, Field::value_offset()));
   if (IsResultNeeded(node)) {
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
 }
 
@@ -1155,18 +1160,18 @@ void CodeGenerator::VisitLoadStaticFieldNode(LoadStaticFieldNode* node) {
 void CodeGenerator::VisitStoreStaticFieldNode(StoreStaticFieldNode* node) {
   node->value()->Visit(this);
   MarkDeoptPoint(node->id(), node->token_index());
-  __ popl(EAX);  // Value.
+  __ popq(RAX);  // Value.
   if (FLAG_enable_type_checks) {
     GenerateAssertAssignable(node->id(),
                              node->value()->token_index(),
                              AbstractType::ZoneHandle(node->field().type()),
                              String::ZoneHandle(node->field().name()));
   }
-  __ LoadObject(EDX, node->field());
-  __ StoreIntoObject(EDX, FieldAddress(EDX, Field::value_offset()), EAX);
+  __ LoadObject(RDX, node->field());
+  __ StoreIntoObject(RDX, FieldAddress(RDX, Field::value_offset()), RAX);
   if (IsResultNeeded(node)) {
     // The result is the input value.
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
 }
 
@@ -1179,14 +1184,14 @@ void CodeGenerator::GenerateLogicalNotOp(UnaryOpNode* node) {
   MarkDeoptPoint(node->id(), node->token_index());
   Label done;
   GenerateConditionTypeCheck(node->id(), node->operand()->token_index());
-  __ popl(EDX);
-  __ LoadObject(EAX, bool_true);
-  __ cmpl(EAX, EDX);
+  __ popq(RDX);
+  __ LoadObject(RAX, bool_true);
+  __ cmpq(RAX, RDX);
   __ j(NOT_EQUAL, &done, Assembler::kNearJump);
-  __ LoadObject(EAX, bool_false);
+  __ LoadObject(RAX, bool_false);
   __ Bind(&done);
   if (IsResultNeeded(node)) {
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
 }
 
@@ -1199,10 +1204,9 @@ void CodeGenerator::VisitUnaryOpNode(UnaryOpNode* node) {
   }
   node->operand()->Visit(this);
   if (node->kind() == Token::kADD) {
-    // TODO(srdjan): Remove this as it is not part of Dart language any longer.
     // Unary operator '+' does not exist, it's a NOP, skip it.
     if (!IsResultNeeded(node)) {
-      __ popl(EAX);
+      __ popq(RAX);
     }
     return;
   }
@@ -1223,7 +1227,7 @@ void CodeGenerator::VisitUnaryOpNode(UnaryOpNode* node) {
                        kNoArgumentNames,
                        kNumArgumentsChecked);
   if (IsResultNeeded(node)) {
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
 }
 
@@ -1231,26 +1235,26 @@ void CodeGenerator::VisitUnaryOpNode(UnaryOpNode* node) {
 void CodeGenerator::VisitIncrOpLocalNode(IncrOpLocalNode* node) {
   ASSERT((node->kind() == Token::kINCR) || (node->kind() == Token::kDECR));
   MarkDeoptPoint(node->id(), node->token_index());
-  GenerateLoadVariable(EAX, node->local());
+  GenerateLoadVariable(RAX, node->local());
   if (!node->prefix() && IsResultNeeded(node)) {
     // Preserve as result.
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
-  const Immediate value = Immediate(reinterpret_cast<int32_t>(Smi::New(1)));
+  const Immediate value = Immediate(reinterpret_cast<int64_t>(Smi::New(1)));
   const char* operator_name = (node->kind() == Token::kINCR) ? "+" : "-";
-  __ pushl(EAX);
-  __ pushl(value);
+  __ pushq(RAX);
+  __ pushq(value);
   GenerateBinaryOperatorCall(node->id(), node->token_index(), operator_name);
-  // result is in EAX.
+  // result is in RAX.
   if (FLAG_enable_type_checks) {
     GenerateAssertAssignable(node->id(),
                              node->token_index(),
                              node->local().type(),
                              node->local().name());
   }
-  GenerateStoreVariable(node->local(), EAX, EDX);
+  GenerateStoreVariable(node->local(), RAX, RDX);
   if (node->prefix() && IsResultNeeded(node)) {
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
 }
 
@@ -1259,34 +1263,34 @@ void CodeGenerator::VisitIncrOpInstanceFieldNode(
     IncrOpInstanceFieldNode* node) {
   ASSERT((node->kind() == Token::kINCR) || (node->kind() == Token::kDECR));
   node->receiver()->Visit(this);
-  __ pushl(Address(ESP, 0));  // Duplicate receiver (preserve for setter).
+  __ pushq(Address(RSP, 0));  // Duplicate receiver (preserve for setter).
   MarkDeoptPoint(node->getter_id(), node->token_index());
   GenerateInstanceGetterCall(node->getter_id(),
                              node->token_index(),
                              node->field_name());
-  // result is in EAX.
-  __ popl(EDX);   // Get receiver.
+  // result is in RAX.
+  __ popq(RDX);   // Get receiver.
   if (!node->prefix() && IsResultNeeded(node)) {
     // Preserve as result.
-    __ pushl(EAX);  // Preserve value as result.
+    __ pushq(RAX);  // Preserve value as result.
   }
-  const Immediate one_value = Immediate(reinterpret_cast<int32_t>(Smi::New(1)));
+  const Immediate one_value = Immediate(reinterpret_cast<int64_t>(Smi::New(1)));
   const char* operator_name = (node->kind() == Token::kINCR) ? "+" : "-";
-  // EAX: Value.
-  // EDX: Receiver.
-  __ pushl(EDX);  // Preserve receiver.
-  __ pushl(EAX);  // Left operand.
-  __ pushl(one_value);  // Right operand.
+  // RAX: Value.
+  // RDX: Receiver.
+  __ pushq(RDX);  // Preserve receiver.
+  __ pushq(RAX);  // Left operand.
+  __ pushq(one_value);  // Right operand.
   GenerateBinaryOperatorCall(node->operator_id(),
                              node->token_index(),
                              operator_name);
-  __ popl(EDX);  // Restore receiver.
+  __ popq(RDX);  // Restore receiver.
   if (IsResultNeeded(node) && node->prefix()) {
     // Value stored into field is the result.
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
-  __ pushl(EDX);  // Receiver.
-  __ pushl(EAX);  // Value.
+  __ pushq(RDX);  // Receiver.
+  __ pushq(RAX);  // Value.
   // It is not necessary to generate a type test of the assigned value here,
   // because the setter will check the type of its incoming arguments.
   GenerateInstanceSetterCall(node->setter_id(),
@@ -1303,25 +1307,25 @@ void CodeGenerator::VisitIncrOpStaticFieldNode(IncrOpStaticFieldNode* node) {
                              node->field_class(),
                              node->field_name());
   } else {
-    __ LoadObject(EDX, node->field());
-    __ movl(EAX, FieldAddress(EDX, Field::value_offset()));
+    __ LoadObject(RDX, node->field());
+    __ movq(RAX, FieldAddress(RDX, Field::value_offset()));
   }
-  // Value in EAX.
+  // Value in RAX.
   if (!node->prefix() && IsResultNeeded(node)) {
     // Preserve as result.
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
-  const Immediate value = Immediate(reinterpret_cast<int32_t>(Smi::New(1)));
+  const Immediate value = Immediate(reinterpret_cast<int64_t>(Smi::New(1)));
   const char* operator_name = (node->kind() == Token::kINCR) ? "+" : "-";
-  __ pushl(EAX);    // Left operand.
-  __ pushl(value);  // Right operand.
+  __ pushq(RAX);    // Left operand.
+  __ pushq(value);  // Right operand.
   GenerateBinaryOperatorCall(node->id(), node->token_index(), operator_name);
-  // result is in EAX.
+  // result is in RAX.
   if (node->prefix() && IsResultNeeded(node)) {
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
   if (node->field().IsNull()) {
-    __ pushl(EAX);
+    __ pushq(RAX);
     // It is not necessary to generate a type test of the assigned value here,
     // because the setter will check the type of its incoming arguments.
     GenerateStaticSetterCall(node->token_index(),
@@ -1334,8 +1338,8 @@ void CodeGenerator::VisitIncrOpStaticFieldNode(IncrOpStaticFieldNode* node) {
                                AbstractType::ZoneHandle(node->field().type()),
                                String::ZoneHandle(node->field().name()));
     }
-    __ LoadObject(EDX, node->field());
-    __ StoreIntoObject(EDX, FieldAddress(EDX, Field::value_offset()), EAX);
+    __ LoadObject(RDX, node->field());
+    __ StoreIntoObject(RDX, FieldAddress(RDX, Field::value_offset()), RAX);
   }
 }
 
@@ -1346,26 +1350,26 @@ void CodeGenerator::VisitIncrOpIndexedNode(IncrOpIndexedNode* node) {
   node->index()->Visit(this);
   MarkDeoptPoint(node->id(), node->token_index());
   // Preserve array and index for GenerateStoreIndex.
-  __ pushl(Address(ESP, kWordSize));  // Copy array.
-  __ pushl(Address(ESP, kWordSize));  // Copy index.
+  __ pushq(Address(RSP, kWordSize));  // Copy array.
+  __ pushq(Address(RSP, kWordSize));  // Copy index.
   GenerateLoadIndexed(node->load_id(), node->token_index());
-  // Result is in EAX.
+  // Result is in RAX.
   if (!node->prefix() && IsResultNeeded(node)) {
-    // Preserve EAX as result.
-    __ popl(EDX);  // Preserved index -> EDX.
-    __ popl(ECX);  // Preserved array -> ECX.
-    __ pushl(EAX);  // Preserve original value from indexed load.
-    __ pushl(ECX);  // Array.
-    __ pushl(EDX);  // Index.
+    // Preserve RAX as result.
+    __ popq(RDX);  // Preserved index -> RDX.
+    __ popq(RCX);  // Preserved array -> RCX.
+    __ pushq(RAX);  // Preserve original value from indexed load.
+    __ pushq(RCX);  // Array.
+    __ pushq(RDX);  // Index.
   }
-  const Immediate value = Immediate(reinterpret_cast<int32_t>(Smi::New(1)));
+  const Immediate value = Immediate(reinterpret_cast<int64_t>(Smi::New(1)));
   const char* operator_name = (node->kind() == Token::kINCR) ? "+" : "-";
-  __ pushl(EAX);    // Left operand.
-  __ pushl(value);  // Right operand.
+  __ pushq(RAX);    // Left operand.
+  __ pushq(value);  // Right operand.
   GenerateBinaryOperatorCall(node->operator_id(),
                              node->token_index(),
                              operator_name);
-  __ pushl(EAX);
+  __ pushq(RAX);
   // TOS(0): value, TOS(1): index, TOS(2): array.
   GenerateStoreIndexed(node->store_id(),
                        node->token_index(),
@@ -1387,8 +1391,8 @@ static const Class* CoreClass(const char* c_name) {
 // - Smi -> compile time subtype check (only if dst class is not parameterized).
 // - Class equality (only if class is not parameterized).
 // Inputs:
-// - EAX: object.
-// Destroys ECX.
+// - RAX: object.
+// Destroys RCX.
 // Returns:
 // - true or false on stack.
 void CodeGenerator::GenerateInstanceOf(intptr_t node_id,
@@ -1421,7 +1425,7 @@ void CodeGenerator::GenerateInstanceOf(intptr_t node_id,
     // time, since an uninstantiated type at compile time could be Object or
     // Dynamic at run time.
     Label non_null;
-    __ cmpl(EAX, raw_null);
+    __ cmpq(RAX, raw_null);
     __ j(NOT_EQUAL, &non_null, Assembler::kNearJump);
     __ PushObject(negate_result ? bool_true : bool_false);
     __ jmp(&done, Assembler::kNearJump);
@@ -1439,24 +1443,24 @@ void CodeGenerator::GenerateInstanceOf(intptr_t node_id,
       const bool is_raw_type = type_arguments.IsNull() ||
           type_arguments.IsDynamicTypes(type_arguments.Length());
       Label runtime_call;
-      __ testl(EAX, Immediate(kSmiTagMask));
+      __ testq(RAX, Immediate(kSmiTagMask));
       __ j(ZERO, &runtime_call, Assembler::kNearJump);
       // Object not Smi.
       if (is_raw_type) {
         if (type.IsListInterface()) {
           Label push_result;
           // TODO(srdjan) also accept List<Object>.
-          __ movl(ECX, FieldAddress(EAX, Object::class_offset()));
-          __ CompareObject(ECX, *CoreClass("ObjectArray"));
+          __ movq(RCX, FieldAddress(RAX, Object::class_offset()));
+          __ CompareObject(RCX, *CoreClass("ObjectArray"));
           __ j(EQUAL, &push_result, Assembler::kNearJump);
-          __ CompareObject(ECX, *CoreClass("GrowableObjectArray"));
+          __ CompareObject(RCX, *CoreClass("GrowableObjectArray"));
           __ j(NOT_EQUAL, &runtime_call, Assembler::kNearJump);
           __ Bind(&push_result);
           __ PushObject(negate_result ? bool_false : bool_true);
           __ jmp(&done, Assembler::kNearJump);
         } else if (!type_class.is_interface()) {
-          __ movl(ECX, FieldAddress(EAX, Object::class_offset()));
-          __ CompareObject(ECX, type_class);
+          __ movq(RCX, FieldAddress(RAX, Object::class_offset()));
+          __ CompareObject(RCX, type_class);
           __ j(NOT_EQUAL, &runtime_call, Assembler::kNearJump);
           __ PushObject(negate_result ? bool_false : bool_true);
           __ jmp(&done, Assembler::kNearJump);
@@ -1466,7 +1470,7 @@ void CodeGenerator::GenerateInstanceOf(intptr_t node_id,
       // Fall through to runtime call.
     } else {
       Label compare_classes;
-      __ testl(EAX, Immediate(kSmiTagMask));
+      __ testq(RAX, Immediate(kSmiTagMask));
       __ j(NOT_ZERO, &compare_classes, Assembler::kNearJump);
       // Object is Smi.
       const Class& smi_class = Class::Handle(Smi::Class());
@@ -1494,8 +1498,8 @@ void CodeGenerator::GenerateInstanceOf(intptr_t node_id,
       }
       if (compare_class != NULL) {
         Label runtime_call;
-        __ movl(ECX, FieldAddress(EAX, Object::class_offset()));
-        __ CompareObject(ECX, *compare_class);
+        __ movq(RCX, FieldAddress(RAX, Object::class_offset()));
+        __ CompareObject(RCX, *compare_class);
         __ j(NOT_EQUAL, &runtime_call, Assembler::kNearJump);
         __ PushObject(negate_result ? bool_false : bool_true);
         __ jmp(&done, Assembler::kNearJump);
@@ -1505,37 +1509,37 @@ void CodeGenerator::GenerateInstanceOf(intptr_t node_id,
   }
   const Object& result = Object::ZoneHandle();
   __ PushObject(result);  // Make room for the result of the runtime call.
-  __ pushl(EAX);  // Push the instance.
+  __ pushq(RAX);  // Push the instance.
   __ PushObject(type);  // Push the type.
   if (!type.IsInstantiated()) {
     GenerateInstantiatorTypeArguments(token_index);
   } else {
-    __ pushl(raw_null);  // Null instantiator.
+    __ pushq(raw_null);  // Null instantiator.
   }
   GenerateCallRuntime(node_id, token_index, kInstanceofRuntimeEntry);
   // Pop the two parameters supplied to the runtime entry. The result of the
   // instanceof runtime call will be left as the result of the operation.
-  __ addl(ESP, Immediate(3 * kWordSize));
+  __ addq(RSP, Immediate(3 * kWordSize));
   if (negate_result) {
     Label negate_done;
-    __ popl(EDX);
-    __ LoadObject(EAX, bool_true);
-    __ cmpl(EDX, EAX);
+    __ popq(RDX);
+    __ LoadObject(RAX, bool_true);
+    __ cmpq(RDX, RAX);
     __ j(NOT_EQUAL, &negate_done, Assembler::kNearJump);
-    __ LoadObject(EAX, bool_false);
+    __ LoadObject(RAX, bool_false);
     __ Bind(&negate_done);
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
   __ Bind(&done);
 }
 
 
-// Jumps to label if ECX equals the given class.
+// Jumps to label if RCX equals the given class.
 // Inputs:
-// - ECX: tested class.
+// - RCX: tested class.
 void CodeGenerator::TestClassAndJump(const Class& cls, Label* label) {
-  __ CompareObject(ECX, cls);
-  __ j(EQUAL, label, Assembler::kNearJump);
+  __ CompareObject(RCX, cls);
+  __ j(EQUAL, label);
 }
 
 
@@ -1544,10 +1548,10 @@ void CodeGenerator::TestClassAndJump(const Class& cls, Label* label) {
 // - Smi -> compile time subtype check (only if dst class is not parameterized).
 // - Class equality (only if class is not parameterized).
 // Inputs:
-// - EAX: object.
-// Destroys ECX and EDX.
+// - RAX: object.
+// Destroys RCX and RDX.
 // Returns:
-// - object in EAX for successful assignable check (or throws TypeError).
+// - object in RAX for successful assignable check (or throws TypeError).
 void CodeGenerator::GenerateAssertAssignable(intptr_t node_id,
                                              intptr_t token_index,
                                              const AbstractType& dst_type,
@@ -1576,8 +1580,8 @@ void CodeGenerator::GenerateAssertAssignable(intptr_t node_id,
   const Immediate raw_null =
       Immediate(reinterpret_cast<intptr_t>(Object::null()));
   Label done, runtime_call;
-  __ cmpl(EAX, raw_null);
-  __ j(EQUAL, &done, Assembler::kNearJump);
+  __ cmpq(RAX, raw_null);
+  __ j(EQUAL, &done);
 
   // If dst_type is instantiated and non-parameterized, we can inline code
   // checking whether the assigned instance is a Smi.
@@ -1596,53 +1600,53 @@ void CodeGenerator::GenerateAssertAssignable(intptr_t node_id,
         // Dynamic type argument, check only classes.
         if (dst_type.IsListInterface()) {
           // TODO(srdjan) also accept List<Object>.
-          __ testl(EAX, Immediate(kSmiTagMask));
-          __ j(ZERO, &runtime_call, Assembler::kNearJump);
-          __ movl(ECX, FieldAddress(EAX, Object::class_offset()));
+          __ testq(RAX, Immediate(kSmiTagMask));
+          __ j(ZERO, &runtime_call);
+          __ movq(RCX, FieldAddress(RAX, Object::class_offset()));
           TestClassAndJump(*CoreClass("ObjectArray"), &done);
           TestClassAndJump(*CoreClass("GrowableObjectArray"), &done);
         } else if (!dst_type_class.is_interface()) {
-          __ testl(EAX, Immediate(kSmiTagMask));
-          __ j(ZERO, &runtime_call, Assembler::kNearJump);
-          __ movl(ECX, FieldAddress(EAX, Object::class_offset()));
+          __ testq(RAX, Immediate(kSmiTagMask));
+          __ j(ZERO, &runtime_call);
+          __ movq(RCX, FieldAddress(RAX, Object::class_offset()));
           TestClassAndJump(dst_type_class, &done);
         }
         // Fall through to runtime class.
       }
     } else {  // dst_type has NO type arguments.
       Label compare_classes;
-      __ testl(EAX, Immediate(kSmiTagMask));
-      __ j(NOT_ZERO, &compare_classes, Assembler::kNearJump);
+      __ testq(RAX, Immediate(kSmiTagMask));
+      __ j(NOT_ZERO, &compare_classes);
       // Object is Smi.
       const Class& smi_class = Class::Handle(Smi::Class());
       // TODO(regis): We should introduce a SmiType.
       if (smi_class.IsSubtypeOf(TypeArguments::Handle(),
                                 dst_type_class,
                                 TypeArguments::Handle())) {
-        // Successful assignable type check: return object in EAX.
-        __ jmp(&done, Assembler::kNearJump);
+        // Successful assignable type check: return object in RAX.
+        __ jmp(&done);
       } else {
         // Failed assignable type check: call runtime to throw TypeError.
-        __ jmp(&runtime_call, Assembler::kNearJump);
+        __ jmp(&runtime_call);
       }
       // Compare if the classes are equal.
       __ Bind(&compare_classes);
       // If dst_type is an interface, we can skip the class equality check,
       // because instances cannot be of an interface type.
       if (!dst_type_class.is_interface()) {
-        __ movl(ECX, FieldAddress(EAX, Object::class_offset()));
+        __ movq(RCX, FieldAddress(RAX, Object::class_offset()));
         TestClassAndJump(dst_type_class, &done);
       } else {
         // However, for specific core library interfaces, we can check for
         // specific core library classes.
         if (dst_type.IsBoolInterface()) {
-          __ movl(ECX, FieldAddress(EAX, Object::class_offset()));
+          __ movq(RCX, FieldAddress(RAX, Object::class_offset()));
           const Class& bool_class = Class::ZoneHandle(
               Isolate::Current()->object_store()->bool_class());
           TestClassAndJump(bool_class, &done);
         } else if (dst_type.IsSubtypeOf(
               Type::Handle(Type::NumberInterface()))) {
-          __ movl(ECX, FieldAddress(EAX, Object::class_offset()));
+          __ movq(RCX, FieldAddress(RAX, Object::class_offset()));
           if (dst_type.IsIntInterface() || dst_type.IsNumberInterface()) {
             // We already checked for Smi above.
             const Class& mint_class = Class::ZoneHandle(
@@ -1658,7 +1662,7 @@ void CodeGenerator::GenerateAssertAssignable(intptr_t node_id,
             TestClassAndJump(double_class, &done);
           }
         } else if (dst_type.IsStringInterface()) {
-          __ movl(ECX, FieldAddress(EAX, Object::class_offset()));
+          __ movq(RCX, FieldAddress(RAX, Object::class_offset()));
           const Class& one_byte_string_class = Class::ZoneHandle(
               Isolate::Current()->object_store()->one_byte_string_class());
           TestClassAndJump(one_byte_string_class, &done);
@@ -1669,10 +1673,10 @@ void CodeGenerator::GenerateAssertAssignable(intptr_t node_id,
               Isolate::Current()->object_store()->four_byte_string_class());
           TestClassAndJump(four_byte_string_class, &done);
         } else if (dst_type.IsFunctionInterface()) {
-          __ movl(ECX, FieldAddress(EAX, Object::class_offset()));
-          __ movl(ECX, FieldAddress(ECX, Class::signature_function_offset()));
-          __ cmpl(ECX, raw_null);
-          __ j(NOT_EQUAL, &done, Assembler::kNearJump);
+          __ movq(RCX, FieldAddress(RAX, Object::class_offset()));
+          __ movq(RCX, FieldAddress(RCX, Class::signature_function_offset()));
+          __ cmpq(RCX, raw_null);
+          __ j(NOT_EQUAL, &done);
         }
       }
     }
@@ -1681,21 +1685,21 @@ void CodeGenerator::GenerateAssertAssignable(intptr_t node_id,
   const Object& result = Object::ZoneHandle();
   __ PushObject(result);  // Make room for the result of the runtime call.
   const Immediate location =
-      Immediate(reinterpret_cast<int32_t>(Smi::New(token_index)));
-  __ pushl(location);  // Push the source location.
-  __ pushl(EAX);  // Push the source object.
+      Immediate(reinterpret_cast<int64_t>(Smi::New(token_index)));
+  __ pushq(location);  // Push the source location.
+  __ pushq(RAX);  // Push the source object.
   __ PushObject(dst_type);  // Push the type of the destination.
   if (!dst_type.IsInstantiated()) {
     GenerateInstantiatorTypeArguments(token_index);
   } else {
-    __ pushl(raw_null);  // Null instantiator.
+    __ pushq(raw_null);  // Null instantiator.
   }
   __ PushObject(dst_name);  // Push the name of the destination.
   GenerateCallRuntime(node_id, token_index, kTypeCheckRuntimeEntry);
   // Pop the parameters supplied to the runtime entry. The result of the
   // type check runtime call is the checked value.
-  __ addl(ESP, Immediate(5 * kWordSize));
-  __ popl(EAX);
+  __ addq(RSP, Immediate(5 * kWordSize));
+  __ popq(RAX);
 
   __ Bind(&done);
 }
@@ -1709,7 +1713,7 @@ void CodeGenerator::GenerateArgumentTypeChecks() {
   ASSERT(num_fixed_params + num_opt_params <= scope->num_variables());
   for (int i = 0; i < num_fixed_params + num_opt_params; i++) {
     LocalVariable* parameter = scope->VariableAt(i);
-    GenerateLoadVariable(EAX, *parameter);
+    GenerateLoadVariable(RAX, *parameter);
     GenerateAssertAssignable(AstNode::kNoId,
                              parameter->token_index(),
                              parameter->type(),
@@ -1730,31 +1734,31 @@ void CodeGenerator::GenerateConditionTypeCheck(intptr_t node_id,
   const Immediate raw_null =
       Immediate(reinterpret_cast<intptr_t>(Object::null()));
   Label runtime_call, done;
-  __ movl(EAX, Address(ESP, 0));
-  __ cmpl(EAX, raw_null);
+  __ movq(RAX, Address(RSP, 0));
+  __ cmpq(RAX, raw_null);
   __ j(EQUAL, &runtime_call, Assembler::kNearJump);
-  __ testl(EAX, Immediate(kSmiTagMask));
+  __ testq(RAX, Immediate(kSmiTagMask));
   __ j(ZERO, &runtime_call, Assembler::kNearJump);  // Call runtime for Smi.
   // This check should pass if the receiver's class implements the interface
   // 'bool'. Check only class 'Bool' since it is the only legal implementation
   // of the interface 'bool'.
   const Class& bool_class =
       Class::ZoneHandle(Isolate::Current()->object_store()->bool_class());
-  __ movl(ECX, FieldAddress(EAX, Object::class_offset()));
-  __ CompareObject(ECX, bool_class);
+  __ movq(RCX, FieldAddress(RAX, Object::class_offset()));
+  __ CompareObject(RCX, bool_class);
   __ j(EQUAL, &done, Assembler::kNearJump);
 
   __ Bind(&runtime_call);
   const Object& result = Object::ZoneHandle();
   __ PushObject(result);  // Make room for the result of the runtime call.
   const Immediate location =
-      Immediate(reinterpret_cast<int32_t>(Smi::New(token_index)));
-  __ pushl(location);  // Push the source location.
-  __ pushl(EAX);  // Push the source object.
+      Immediate(reinterpret_cast<int64_t>(Smi::New(token_index)));
+  __ pushq(location);  // Push the source location.
+  __ pushq(RAX);  // Push the source object.
   GenerateCallRuntime(node_id, token_index, kConditionTypeErrorRuntimeEntry);
   // Pop the parameters supplied to the runtime entry. The result of the
   // type check runtime call is the checked value.
-  __ addl(ESP, Immediate(3 * kWordSize));
+  __ addq(RSP, Immediate(3 * kWordSize));
 
   __ Bind(&done);
 }
@@ -1767,14 +1771,14 @@ void CodeGenerator::VisitComparisonNode(ComparisonNode* node) {
 
   // The instanceof operator needs special handling.
   if (Token::IsInstanceofOperator(node->kind())) {
-    __ popl(EAX);  // Left operand.
+    __ popq(RAX);  // Left operand.
     ASSERT(node->right()->IsTypeNode());
     GenerateInstanceOf(node->id(),
                        node->token_index(),
                        node->right()->AsTypeNode()->type(),
                        (node->kind() == Token::kISNOT));
     if (!IsResultNeeded(node)) {
-      __ popl(EAX);  // Pop the result of the instanceof operation.
+      __ popq(RAX);  // Pop the result of the instanceof operation.
     }
     return;
   }
@@ -1785,25 +1789,25 @@ void CodeGenerator::VisitComparisonNode(ComparisonNode* node) {
   // '===' and '!==' are not overloadable.
   if ((node->kind() == Token::kEQ_STRICT) ||
       (node->kind() == Token::kNE_STRICT)) {
-    __ popl(EDX);  // Right operand.
-    __ popl(EAX);  // Left operand.
+    __ popq(RDX);  // Right operand.
+    __ popq(RAX);  // Left operand.
     if (!IsResultNeeded(node)) {
       return;
     }
     Label load_true, done;
-    __ cmpl(EAX, EDX);
+    __ cmpq(RAX, RDX);
     if (node->kind() == Token::kEQ_STRICT) {
       __ j(EQUAL, &load_true, Assembler::kNearJump);
     } else {
       __ j(NOT_EQUAL, &load_true, Assembler::kNearJump);
     }
-    __ LoadObject(EAX, bool_false);
+    __ LoadObject(RAX, bool_false);
     __ jmp(&done, Assembler::kNearJump);
     __ Bind(&load_true);
-    __ LoadObject(EAX, bool_true);
+    __ LoadObject(RAX, bool_true);
     __ Bind(&done);
-    // Result is in EAX.
-    __ pushl(EAX);
+    // Result is in RAX.
+    __ pushq(RAX);
     return;
   }
 
@@ -1821,22 +1825,22 @@ void CodeGenerator::VisitComparisonNode(ComparisonNode* node) {
           Immediate(reinterpret_cast<intptr_t>(Object::null()));
       Label non_null_compare, load_true;
       // Check if left argument is null.
-      __ cmpl(Address(ESP, 1 * kWordSize), raw_null);
+      __ cmpq(Address(RSP, 1 * kWordSize), raw_null);
       __ j(NOT_EQUAL, &non_null_compare, Assembler::kNearJump);
       // Comparison with NULL is "===".
       // Load/remove arguments.
-      __ popl(EDX);
-      __ popl(EAX);
-      __ cmpl(EAX, EDX);
+      __ popq(RDX);
+      __ popq(RAX);
+      __ cmpq(RAX, RDX);
       if (node->kind() == Token::kEQ) {
         __ j(EQUAL, &load_true, Assembler::kNearJump);
       } else {
         __ j(NOT_EQUAL, &load_true, Assembler::kNearJump);
       }
-      __ LoadObject(EAX, bool_false);
+      __ LoadObject(RAX, bool_false);
       __ jmp(&null_done, Assembler::kNearJump);
       __ Bind(&load_true);
-      __ LoadObject(EAX, bool_true);
+      __ LoadObject(RAX, bool_true);
       __ jmp(&null_done, Assembler::kNearJump);
       __ Bind(&non_null_compare);
     }
@@ -1852,32 +1856,32 @@ void CodeGenerator::VisitComparisonNode(ComparisonNode* node) {
                          kNoArgumentNames,
                          kNumArgumentsChecked);
 
-    // Result is in EAX. No need to negate if result is not needed.
+    // Result is in RAX. No need to negate if result is not needed.
     if ((node->kind() == Token::kNE) && IsResultNeeded(node)) {
       // Negate result.
       Label load_true, done;
-      __ LoadObject(EDX, bool_false);
-      __ cmpl(EAX, EDX);
+      __ LoadObject(RDX, bool_false);
+      __ cmpq(RAX, RDX);
       __ j(EQUAL, &load_true, Assembler::kNearJump);
-      __ movl(EAX, EDX);  // false.
+      __ movq(RAX, RDX);  // false.
       __ jmp(&done, Assembler::kNearJump);
       __ Bind(&load_true);
-      __ LoadObject(EAX, bool_true);
+      __ LoadObject(RAX, bool_true);
       __ Bind(&done);
     }
     __ Bind(&null_done);
-    // Result is in EAX.
+    // Result is in RAX.
     if (IsResultNeeded(node)) {
-      __ pushl(EAX);
+      __ pushq(RAX);
     }
     return;
   }
 
   // Call operator.
   GenerateBinaryOperatorCall(node->id(), node->token_index(), node->Name());
-  // Result is in EAX.
+  // Result is in RAX.
   if (IsResultNeeded(node)) {
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
 }
 
@@ -1886,15 +1890,15 @@ void CodeGenerator::CountBackwardLoop() {
   Label done;
   const Function& function =
       Function::ZoneHandle(parsed_function_.function().raw());
-  __ LoadObject(EAX, function);
-  __ movl(EBX, FieldAddress(EAX, Function::invocation_counter_offset()));
-  __ incl(EBX);
+  __ LoadObject(RAX, function);
+  __ movq(RBX, FieldAddress(RAX, Function::invocation_counter_offset()));
+  __ incq(RBX);
   if (!FLAG_report_invocation_count) {
     // Prevent overflow.
-    __ cmpl(EBX, Immediate(FLAG_optimization_invocation_threshold));
+    __ cmpq(RBX, Immediate(FLAG_optimization_invocation_threshold));
     __ j(GREATER, &done);
   }
-  __ movl(FieldAddress(EAX, Function::invocation_counter_offset()), EBX);
+  __ movq(FieldAddress(RAX, Function::invocation_counter_offset()), RBX);
   __ Bind(&done);
 }
 
@@ -1905,9 +1909,9 @@ void CodeGenerator::VisitWhileNode(WhileNode* node) {
   __ Bind(label->continue_label());
   node->condition()->Visit(this);
   GenerateConditionTypeCheck(node->id(), node->condition()->token_index());
-  __ popl(EAX);
-  __ LoadObject(EDX, bool_true);
-  __ cmpl(EAX, EDX);
+  __ popq(RAX);
+  __ LoadObject(RDX, bool_true);
+  __ cmpq(RAX, RDX);
   __ j(NOT_EQUAL, label->break_label());
   node->body()->Visit(this);
   CountBackwardLoop();
@@ -1926,9 +1930,9 @@ void CodeGenerator::VisitDoWhileNode(DoWhileNode* node) {
   __ Bind(label->continue_label());
   node->condition()->Visit(this);
   GenerateConditionTypeCheck(node->id(), node->condition()->token_index());
-  __ popl(EAX);
-  __ LoadObject(EDX, bool_true);
-  __ cmpl(EAX, EDX);
+  __ popq(RAX);
+  __ LoadObject(RDX, bool_true);
+  __ cmpq(RAX, RDX);
   __ j(EQUAL, &loop);
   __ Bind(label->break_label());
 }
@@ -1943,9 +1947,9 @@ void CodeGenerator::VisitForNode(ForNode* node) {
   if (node->condition() != NULL) {
     node->condition()->Visit(this);
     GenerateConditionTypeCheck(node->id(), node->condition()->token_index());
-    __ popl(EAX);
-    __ LoadObject(EDX, bool_true);
-    __ cmpl(EAX, EDX);
+    __ popq(RAX);
+    __ LoadObject(RDX, bool_true);
+    __ cmpq(RAX, RDX);
     __ j(NOT_EQUAL, label->break_label());
   }
   node->body()->Visit(this);
@@ -1978,7 +1982,7 @@ void CodeGenerator::VisitJumpNode(JumpNode* node) {
     int context_level = state()->context_level();
     ASSERT(context_level >= target_context_level);
     while (context_level-- > target_context_level) {
-      __ movl(CTX, FieldAddress(CTX, Context::parent_offset()));
+      __ movq(CTX, FieldAddress(CTX, Context::parent_offset()));
     }
   }
 
@@ -1995,9 +1999,9 @@ void CodeGenerator::VisitConditionalExprNode(ConditionalExprNode* node) {
   Label false_label, done;
   node->condition()->Visit(this);
   GenerateConditionTypeCheck(node->id(), node->condition()->token_index());
-  __ popl(EAX);
-  __ LoadObject(EDX, bool_true);
-  __ cmpl(EAX, EDX);
+  __ popq(RAX);
+  __ LoadObject(RDX, bool_true);
+  __ cmpq(RAX, RDX);
   __ j(NOT_EQUAL, &false_label);
   node->true_expr()->Visit(this);
   __ jmp(&done);
@@ -2005,7 +2009,7 @@ void CodeGenerator::VisitConditionalExprNode(ConditionalExprNode* node) {
   node->false_expr()->Visit(this);
   __ Bind(&done);
   if (!IsResultNeeded(node)) {
-    __ popl(EAX);
+    __ popq(RAX);
   }
 }
 
@@ -2025,8 +2029,8 @@ void CodeGenerator::VisitCaseNode(CaseNode* node) {
     // Load case expression onto stack.
     AstNode* case_expr = node->case_expressions()->NodeAt(i);
     case_expr->Visit(this);
-    __ popl(EAX);
-    __ CompareObject(EAX, bool_true);
+    __ popq(RAX);
+    __ CompareObject(RAX, bool_true);
     // Jump to case clause code if case expression equals switch expression
     __ j(EQUAL, &case_statements);
   }
@@ -2055,9 +2059,9 @@ void CodeGenerator::VisitIfNode(IfNode* node) {
   Label false_label;
   node->condition()->Visit(this);
   GenerateConditionTypeCheck(node->id(), node->condition()->token_index());
-  __ popl(EAX);
-  __ LoadObject(EDX, bool_true);
-  __ cmpl(EAX, EDX);
+  __ popq(RAX);
+  __ LoadObject(RDX, bool_true);
+  __ cmpq(RAX, RDX);
   __ j(NOT_EQUAL, &false_label);
   node->true_branch()->Visit(this);
   if (node->false_branch() != NULL) {
@@ -2081,9 +2085,9 @@ void CodeGenerator::GenerateLogicalAndOrOp(BinaryOpNode* node) {
   Label load_false, done;
   node->left()->Visit(this);
   GenerateConditionTypeCheck(node->id(), node->left()->token_index());
-  __ popl(EAX);
-  __ LoadObject(EDX, bool_true);
-  __ cmpl(EAX, EDX);
+  __ popq(RAX);
+  __ LoadObject(RDX, bool_true);
+  __ cmpq(RAX, RDX);
   if (node->kind() == Token::kAND) {
     __ j(NOT_EQUAL, &load_false);
   } else {
@@ -2092,21 +2096,21 @@ void CodeGenerator::GenerateLogicalAndOrOp(BinaryOpNode* node) {
   }
   node->right()->Visit(this);
   GenerateConditionTypeCheck(node->id(), node->right()->token_index());
-  __ popl(EAX);
-  __ LoadObject(EDX, bool_true);
-  __ cmpl(EAX, EDX);
+  __ popq(RAX);
+  __ LoadObject(RDX, bool_true);
+  __ cmpq(RAX, RDX);
   __ j(EQUAL, &done);
   __ Bind(&load_false);
-  __ LoadObject(EAX, bool_false);
+  __ LoadObject(RAX, bool_false);
   __ Bind(&done);
   if (IsResultNeeded(node)) {
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
 }
 
 
 // Expect receiver(left operand) and right operand on stack.
-// Return result in EAX.
+// Return result in RAX.
 void CodeGenerator::GenerateBinaryOperatorCall(intptr_t node_id,
                                                intptr_t token_index,
                                                const char* name) {
@@ -2135,7 +2139,7 @@ void CodeGenerator::VisitBinaryOpNode(BinaryOpNode* node) {
   MarkDeoptPoint(node->id(), node->token_index());
   GenerateBinaryOperatorCall(node->id(), node->token_index(), node->Name());
   if (IsResultNeeded(node)) {
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
 }
 
@@ -2187,8 +2191,8 @@ void CodeGenerator::VisitStringConcatNode(StringConcatNode* node) {
     ASSERT(!concatenated.IsNull());
     concatenated = String::NewSymbol(concatenated);
 
-    __ LoadObject(EAX, concatenated);
-    __ pushl(EAX);
+    __ LoadObject(RAX, concatenated);
+    __ pushq(RAX);
     return;
   }
 
@@ -2197,14 +2201,14 @@ void CodeGenerator::VisitStringConcatNode(StringConcatNode* node) {
   ArgumentListNode* interpol_arg = new ArgumentListNode(node->token_index());
   interpol_arg->Add(node->values());
   node->values()->Visit(this);
-  __ LoadObject(ECX, interpol_func);
-  __ LoadObject(EDX, ArgumentsDescriptor(interpol_arg->length(),
+  __ LoadObject(RBX, interpol_func);
+  __ LoadObject(R10, ArgumentsDescriptor(interpol_arg->length(),
                                          interpol_arg->names()));
   GenerateCall(node->token_index(), &StubCode::CallStaticFunctionLabel());
-  __ addl(ESP, Immediate(interpol_arg->length() * kWordSize));
-  // Result is in EAX.
+  __ addq(RSP, Immediate(interpol_arg->length() * kWordSize));
+  // Result is in RAX.
   if (IsResultNeeded(node)) {
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
 }
 
@@ -2225,23 +2229,23 @@ void CodeGenerator::VisitInstanceCallNode(InstanceCallNode* node) {
                        number_of_arguments,
                        node->arguments()->names(),
                        kNumArgumentsChecked);
-  // Result is in EAX.
+  // Result is in RAX.
   if (IsResultNeeded(node)) {
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
 }
 
 
 void CodeGenerator::VisitStaticCallNode(StaticCallNode* node) {
   node->arguments()->Visit(this);
-  __ LoadObject(ECX, node->function());
-  __ LoadObject(EDX, ArgumentsDescriptor(node->arguments()->length(),
+  __ LoadObject(RBX, node->function());
+  __ LoadObject(R10, ArgumentsDescriptor(node->arguments()->length(),
                                          node->arguments()->names()));
   GenerateCall(node->token_index(), &StubCode::CallStaticFunctionLabel());
-  __ addl(ESP, Immediate(node->arguments()->length() * kWordSize));
-  // Result is in EAX.
+  __ addq(RSP, Immediate(node->arguments()->length() * kWordSize));
+  // Result is in RAX.
   if (IsResultNeeded(node)) {
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
 }
 
@@ -2250,7 +2254,7 @@ void CodeGenerator::VisitClosureCallNode(ClosureCallNode* node) {
   // The spec states that the closure is evaluated before the arguments.
   // Preserve the current context, since it will be overridden by the closure
   // context during the call.
-  __ pushl(CTX);
+  __ pushq(CTX);
   // Compute the closure object and pass it as first argument to the stub.
   node->closure()->Visit(this);
   // Now compute the arguments to the call.
@@ -2260,15 +2264,15 @@ void CodeGenerator::VisitClosureCallNode(ClosureCallNode* node) {
   // closure function (the function will be compiled if it has not already been
   // compiled).
   // NOTE: The stub accesses the closure before the parameter list.
-  __ LoadObject(EDX, ArgumentsDescriptor(node->arguments()->length(),
+  __ LoadObject(R10, ArgumentsDescriptor(node->arguments()->length(),
                                          node->arguments()->names()));
   GenerateCall(node->token_index(), &StubCode::CallClosureFunctionLabel());
-  __ addl(ESP, Immediate((node->arguments()->length() + 1) * kWordSize));
+  __ addq(RSP, Immediate((node->arguments()->length() + 1) * kWordSize));
   // Restore the context.
-  __ popl(CTX);
-  // Result is in EAX.
+  __ popq(CTX);
+  // Result is in RAX.
   if (IsResultNeeded(node)) {
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
 }
 
@@ -2307,7 +2311,7 @@ void CodeGenerator::GenerateInstantiatorTypeArguments(intptr_t token_index) {
     ASSERT(parsed_function().instantiator() != NULL);
     parsed_function().instantiator()->Visit(this);
     if (!outer_function.IsFactory()) {
-      __ popl(EAX);  // Pop instantiator.
+      __ popq(RAX);  // Pop instantiator.
       // The instantiator is the receiver of the caller, which is not a factory.
       // The receiver cannot be null; extract its AbstractTypeArguments object.
       // Note that in the factory case, the instantiator is the first parameter
@@ -2315,8 +2319,8 @@ void CodeGenerator::GenerateInstantiatorTypeArguments(intptr_t token_index) {
       intptr_t type_arguments_instance_field_offset =
           instantiator_class.type_arguments_instance_field_offset();
       ASSERT(type_arguments_instance_field_offset != Class::kNoTypeArguments);
-      __ movl(EAX, FieldAddress(EAX, type_arguments_instance_field_offset));
-      __ pushl(EAX);
+      __ movq(RAX, FieldAddress(RAX, type_arguments_instance_field_offset));
+      __ pushq(RAX);
     }
   }
 }
@@ -2346,31 +2350,31 @@ void CodeGenerator::GenerateTypeArguments(ConstructorCallNode* node,
       __ PushObject(node->type_arguments());
       if (!node->constructor().IsFactory()) {
         // The allocator additionally requires the instantiator type arguments.
-        __ pushl(raw_null);  // Null instantiator.
+        __ pushq(raw_null);  // Null instantiator.
       }
     }
   } else {
     // The type arguments are uninstantiated.
     ASSERT(requires_type_arguments);
     GenerateInstantiatorTypeArguments(node->token_index());
-    __ popl(EAX);  // Pop instantiator.
-    // EAX is the instantiator AbstractTypeArguments object (or null).
-    // If EAX is null, no need to instantiate the type arguments, use null, and
+    __ popq(RAX);  // Pop instantiator.
+    // RAX is the instantiator AbstractTypeArguments object (or null).
+    // If RAX is null, no need to instantiate the type arguments, use null, and
     // allocate an object of a raw type.
     Label type_arguments_instantiated, type_arguments_uninstantiated;
-    __ cmpl(EAX, raw_null);
+    __ cmpq(RAX, raw_null);
     __ j(EQUAL, &type_arguments_instantiated, Assembler::kNearJump);
 
     // Instantiate non-null type arguments.
     if (node->type_arguments().IsUninstantiatedIdentity()) {
       // Check if the instantiator type argument vector is a TypeArguments of a
       // matching length and, if so, use it as the instantiated type_arguments.
-      __ LoadObject(ECX, Class::ZoneHandle(Object::type_arguments_class()));
-      __ cmpl(ECX, FieldAddress(EAX, Object::class_offset()));
+      __ LoadObject(RCX, Class::ZoneHandle(Object::type_arguments_class()));
+      __ cmpq(RCX, FieldAddress(RAX, Object::class_offset()));
       __ j(NOT_EQUAL, &type_arguments_uninstantiated, Assembler::kNearJump);
-      Immediate arguments_length = Immediate(reinterpret_cast<int32_t>(
+      Immediate arguments_length = Immediate(reinterpret_cast<int64_t>(
           Smi::New(node->type_arguments().Length())));
-      __ cmpl(FieldAddress(EAX, TypeArguments::length_offset()),
+      __ cmpq(FieldAddress(RAX, TypeArguments::length_offset()),
           arguments_length);
       __ j(EQUAL, &type_arguments_instantiated, Assembler::kNearJump);
     }
@@ -2381,26 +2385,26 @@ void CodeGenerator::GenerateTypeArguments(ConstructorCallNode* node,
       const Object& result = Object::ZoneHandle();
       __ PushObject(result);  // Make room for the result of the runtime call.
       __ PushObject(node->type_arguments());
-      __ pushl(EAX);  // Push instantiator type arguments.
+      __ pushq(RAX);  // Push instantiator type arguments.
       GenerateCallRuntime(node->id(),
                           node->token_index(),
                           kInstantiateTypeArgumentsRuntimeEntry);
-      __ popl(EAX);  // Pop instantiator type arguments.
-      __ popl(EAX);  // Pop uninstantiated type arguments.
-      __ popl(EAX);  // Pop instantiated type arguments.
+      __ popq(RAX);  // Pop instantiator type arguments.
+      __ popq(RAX);  // Pop uninstantiated type arguments.
+      __ popq(RAX);  // Pop instantiated type arguments.
       __ Bind(&type_arguments_instantiated);
-      __ pushl(EAX);  // Instantiated type arguments.
+      __ pushq(RAX);  // Instantiated type arguments.
     } else {
       // In the non-factory case, we rely on the allocation stub to
       // instantiate the type arguments.
       __ PushObject(node->type_arguments());
-      __ pushl(EAX);  // Instantiator type arguments.
+      __ pushq(RAX);  // Instantiator type arguments.
       Label type_arguments_pushed;
       __ jmp(&type_arguments_pushed, Assembler::kNearJump);
 
       __ Bind(&type_arguments_instantiated);
-      __ pushl(EAX);  // Instantiated type arguments.
-      __ pushl(raw_null);  // Null instantiator.
+      __ pushq(RAX);  // Instantiated type arguments.
+      __ pushq(raw_null);  // Null instantiator.
       __ Bind(&type_arguments_pushed);
     }
   }
@@ -2416,14 +2420,14 @@ void CodeGenerator::VisitConstructorCallNode(ConstructorCallNode* node) {
     int num_args = node->arguments()->length() + 1;  // +1 to include type args.
     node->arguments()->Visit(this);
     // Call the factory.
-    __ LoadObject(ECX, node->constructor());
-    __ LoadObject(EDX, ArgumentsDescriptor(num_args,
+    __ LoadObject(RBX, node->constructor());
+    __ LoadObject(R10, ArgumentsDescriptor(num_args,
                                            node->arguments()->names()));
     GenerateCall(node->token_index(), &StubCode::CallStaticFunctionLabel());
-    // Factory constructor returns object in EAX.
-    __ addl(ESP, Immediate(num_args * kWordSize));
+    // Factory constructor returns object in RAX.
+    __ addq(RSP, Immediate(num_args * kWordSize));
     if (IsResultNeeded(node)) {
-      __ pushl(EAX);
+      __ pushq(RAX);
     }
     return;
   }
@@ -2438,16 +2442,16 @@ void CodeGenerator::VisitConstructorCallNode(ConstructorCallNode* node) {
   const ExternalLabel label(cls.ToCString(), stub.EntryPoint());
   GenerateCall(node->token_index(), &label);
   if (requires_type_arguments) {
-    __ popl(ECX);  // Pop type arguments.
-    __ popl(ECX);  // Pop instantiator type arguments.
+    __ popq(RCX);  // Pop type arguments.
+    __ popq(RCX);  // Pop instantiator type arguments.
   }
 
   if (IsResultNeeded(node)) {
-    __ pushl(EAX);  // Set up return value from allocate.
+    __ pushq(RAX);  // Set up return value from allocate.
   }
 
   // First argument(this) for constructor call which follows.
-  __ pushl(EAX);
+  __ pushq(RAX);
   // Second argument is the implicit construction phase parameter.
   // Run both the constructor initializer list and the constructor body.
   __ PushObject(Smi::ZoneHandle(Smi::New(Function::kCtorPhaseAll)));
@@ -2459,17 +2463,17 @@ void CodeGenerator::VisitConstructorCallNode(ConstructorCallNode* node) {
   // Call the constructor.
   // +2 to include implicit receiver and phase arguments.
   int num_args = node->arguments()->length() + 2;
-  __ LoadObject(ECX, node->constructor());
-  __ LoadObject(EDX, ArgumentsDescriptor(num_args, node->arguments()->names()));
+  __ LoadObject(RBX, node->constructor());
+  __ LoadObject(R10, ArgumentsDescriptor(num_args, node->arguments()->names()));
   GenerateCall(node->token_index(), &StubCode::CallStaticFunctionLabel());
   // Constructors do not return any value.
 
   // Pop out all the other arguments on the stack.
-  __ addl(ESP, Immediate(num_args * kWordSize));
+  __ addq(RSP, Immediate(num_args * kWordSize));
 }
 
 
-// Expects receiver on stack, returns result in EAX..
+// Expects receiver on stack, returns result in RAX..
 void CodeGenerator::GenerateInstanceGetterCall(intptr_t node_id,
                                                intptr_t token_index,
                                                const String& field_name) {
@@ -2494,7 +2498,7 @@ void CodeGenerator::VisitInstanceGetterNode(InstanceGetterNode* node) {
                              node->token_index(),
                              node->field_name());
   if (IsResultNeeded(node)) {
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
 }
 
@@ -2524,11 +2528,11 @@ void CodeGenerator::VisitInstanceSetterNode(InstanceSetterNode* node) {
   node->value()->Visit(this);
   MarkDeoptPoint(node->id(), node->token_index());
   if (IsResultNeeded(node)) {
-    __ popl(EAX);   // value.
-    __ popl(EDX);   // receiver.
-    __ pushl(EAX);  // Preserve value.
-    __ pushl(EDX);  // arg0: receiver.
-    __ pushl(EAX);  // arg1: value.
+    __ popq(RAX);   // value.
+    __ popq(RDX);   // receiver.
+    __ pushq(RAX);  // Preserve value.
+    __ pushq(RDX);  // arg0: receiver.
+    __ pushq(RAX);  // arg1: value.
   }
   // It is not necessary to generate a type test of the assigned value here,
   // because the setter will check the type of its incoming arguments.
@@ -2538,7 +2542,7 @@ void CodeGenerator::VisitInstanceSetterNode(InstanceSetterNode* node) {
 }
 
 
-// Return result in EAX.
+// Return result in RAX.
 void CodeGenerator::GenerateStaticGetterCall(intptr_t token_index,
                                              const Class& field_class,
                                              const String& field_name) {
@@ -2549,10 +2553,10 @@ void CodeGenerator::GenerateStaticGetterCall(intptr_t token_index,
     ErrorMsg(token_index, "Static getter does not exist: %s",
         getter_name.ToCString());
   }
-  __ LoadObject(ECX, function);
+  __ LoadObject(RBX, function);
   const int kNumberOfArguments = 0;
   const Array& kNoArgumentNames = Array::Handle();
-  __ LoadObject(EDX, ArgumentsDescriptor(kNumberOfArguments, kNoArgumentNames));
+  __ LoadObject(R10, ArgumentsDescriptor(kNumberOfArguments, kNoArgumentNames));
   GenerateCall(token_index, &StubCode::CallStaticFunctionLabel());
   // No arguments were pushed, hence nothing to pop.
 }
@@ -2563,9 +2567,9 @@ void CodeGenerator::VisitStaticGetterNode(StaticGetterNode* node) {
   GenerateStaticGetterCall(node->token_index(),
                            node->cls(),
                            node->field_name());
-  // Result is in EAX.
+  // Result is in RAX.
   if (IsResultNeeded(node)) {
-    __ pushl(EAX);
+    __ pushq(RAX);
   }
 }
 
@@ -2577,12 +2581,12 @@ void CodeGenerator::GenerateStaticSetterCall(intptr_t token_index,
   const String& setter_name = String::Handle(Field::SetterName(field_name));
   const Function& function =
       Function::ZoneHandle(field_class.LookupStaticFunction(setter_name));
-  __ LoadObject(ECX, function);
+  __ LoadObject(RBX, function);
   const int kNumberOfArguments = 1;  // value.
   const Array& kNoArgumentNames = Array::Handle();
-  __ LoadObject(EDX, ArgumentsDescriptor(kNumberOfArguments, kNoArgumentNames));
+  __ LoadObject(R10, ArgumentsDescriptor(kNumberOfArguments, kNoArgumentNames));
   GenerateCall(token_index, &StubCode::CallStaticFunctionLabel());
-  __ addl(ESP, Immediate(kNumberOfArguments * kWordSize));
+  __ addq(RSP, Immediate(kNumberOfArguments * kWordSize));
 }
 
 
@@ -2592,8 +2596,8 @@ void CodeGenerator::VisitStaticSetterNode(StaticSetterNode* node) {
   node->value()->Visit(this);
   if (IsResultNeeded(node)) {
     // Preserve the original value when returning from setter.
-    __ movl(EAX, Address(ESP, 0));
-    __ pushl(EAX);  // arg0: value.
+    __ movq(RAX, Address(RSP, 0));
+    __ pushq(RAX);  // arg0: value.
   }
   // It is not necessary to generate a type test of the assigned value here,
   // because the setter will check the type of its incoming arguments.
@@ -2606,18 +2610,18 @@ void CodeGenerator::VisitStaticSetterNode(StaticSetterNode* node) {
 void CodeGenerator::VisitNativeBodyNode(NativeBodyNode* node) {
   // Push the result place holder initialized to NULL.
   __ PushObject(Object::ZoneHandle());
-  // Pass a pointer to the first argument in EAX.
+  // Pass a pointer to the first argument in RAX.
   if (!node->has_optional_parameters()) {
-    __ leal(EAX, Address(EBP, (1 + node->argument_count()) * kWordSize));
+    __ leaq(RAX, Address(RBP, (1 + node->argument_count()) * kWordSize));
   } else {
-    __ leal(EAX, Address(EBP, -1 * kWordSize));
+    __ leaq(RAX, Address(RBP, -1 * kWordSize));
   }
-  __ movl(ECX, Immediate(reinterpret_cast<uword>(node->native_c_function())));
-  __ movl(EDX, Immediate(node->argument_count()));
+  __ movq(RBX, Immediate(reinterpret_cast<uword>(node->native_c_function())));
+  __ movq(R10, Immediate(node->argument_count()));
   GenerateCall(node->token_index(), &StubCode::CallNativeCFunctionLabel());
   // Result is on the stack.
   if (!IsResultNeeded(node)) {
-    __ popl(EAX);
+    __ popq(RAX);
   }
 }
 
@@ -2628,15 +2632,15 @@ void CodeGenerator::VisitCatchClauseNode(CatchClauseNode* node) {
   // Restore CTX from local variable ':saved_context'.
   GenerateLoadVariable(CTX, node->context_var());
 
-  // Restore ESP from EBP as we are coming from a throw and the code for
+  // Restore RSP from RBP as we are coming from a throw and the code for
   // popping arguments has not been run.
   ASSERT(locals_space_size() >= 0);
-  __ movl(ESP, EBP);
-  __ subl(ESP, Immediate(locals_space_size()));
+  __ movq(RSP, RBP);
+  __ subq(RSP, Immediate(locals_space_size()));
 
   // The JumpToExceptionHandler trampoline code sets up
-  // - the exception object in EAX (kExceptionObjectReg)
-  // - the stacktrace object in register EDX (kStackTraceObjectReg)
+  // - the exception object in RAX (kExceptionObjectReg)
+  // - the stacktrace object in register RDX (kStackTraceObjectReg)
   // We now setup the exception object and the trace object
   // so that the handler code has access to these objects.
   GenerateStoreVariable(node->exception_var(),
@@ -2703,15 +2707,15 @@ void CodeGenerator::VisitTryCatchNode(TryCatchNode* node) {
 void CodeGenerator::VisitThrowNode(ThrowNode* node) {
   const Object& result = Object::ZoneHandle();
   node->exception()->Visit(this);
-  __ popl(EAX);  // Exception object is now in EAX.
+  __ popq(RAX);  // Exception object is now in RAX.
   if (node->stacktrace() != NULL) {
     __ PushObject(result);  // Make room for the result of the runtime call.
-    __ pushl(EAX);  // Push the exception object.
+    __ pushq(RAX);  // Push the exception object.
     node->stacktrace()->Visit(this);
     GenerateCallRuntime(node->id(), node->token_index(), kReThrowRuntimeEntry);
   } else {
     __ PushObject(result);  // Make room for the result of the runtime call.
-    __ pushl(EAX);  // Push the exception object.
+    __ pushq(RAX);  // Push the exception object.
     GenerateCallRuntime(node->id(), node->token_index(), kThrowRuntimeEntry);
   }
   // We should never return here.
@@ -2790,4 +2794,4 @@ void CodeGenerator::ErrorMsg(intptr_t token_index, const char* format, ...) {
 
 }  // namespace dart
 
-#endif  // defined TARGET_ARCH_IA32
+#endif  // defined TARGET_ARCH_X64
