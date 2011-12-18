@@ -300,9 +300,9 @@ int main()
 
     if (lastCreatedArray) {
       if (lastCreatedArray->values[0] == 12) {
-        printf("NumArray successfully manuipulated by Dart.\n");
+        printf("NumArray successfully manipulated by Dart.\n");
       } else {
-        printf("Erro when accessing NumArray from Dart.ßn");
+        printf("Error when accessing NumArray from Dart.\n");
       }
     }
     return 0;
