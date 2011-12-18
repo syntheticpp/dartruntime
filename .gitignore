@@ -67,3 +67,6 @@ third_party/gsutil/*/gsutilc
 
 # Local GDB files.
 .gdb_history
+
+# generated documentation
+doc/API
