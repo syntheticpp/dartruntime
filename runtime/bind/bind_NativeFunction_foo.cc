@@ -1,4 +1,4 @@
-// Copyright (c) 2011, Peter Kümmel
+// Copyright (c) 2011, Peter KÃ¼mmel
 // All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE
 
@@ -38,7 +38,7 @@ bool checkResult(const Dart_Handle& result)
 //------------------------------------------------------------------
 static Dart_Handle libraryHandler(Dart_LibraryTag tag,
                                   Dart_Handle library,
-                                  Dart_Handle url) 
+                                  Dart_Handle url)
 {
   if (tag == kCanonicalizeUrl) {
     return url;
@@ -49,11 +49,11 @@ static Dart_Handle libraryHandler(Dart_LibraryTag tag,
 
 
 //------------------------------------------------------------------
-static Dart_NativeFunction resolveFoo(Dart_Handle name, int arg_count) 
+static Dart_NativeFunction resolveFoo(Dart_Handle name, int arg_count)
 {
     return &foo;
 }
-                                                     
+
 
 //------------------------------------------------------------------
 int main()
@@ -65,7 +65,7 @@ int main()
         "}"
         ;
 
-    
+
     if (!Dart_SetVMFlags(0, 0)) {
         return 10;
     }
@@ -77,6 +77,9 @@ int main()
     // create an isolate
     char* err;
     Dart_Isolate isolate = Dart_CreateIsolate(0, 0, &err);
+    if (isolate == 0) {
+        return 21;
+    }
     Dart_Scope isolate_scope;
 
     // Load

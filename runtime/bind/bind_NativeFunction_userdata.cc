@@ -1,4 +1,4 @@
-// Copyright (c) 2011, Peter K�mmel
+// Copyright (c) 2011, Peter Kümmel
 // All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE
 
@@ -13,13 +13,17 @@ class NumArray
 {
 public:
     NumArray() : size(1) {}
-    int size;
+    uint64_t size;
     double values[1];
 
 private:
     NumArray(const NumArray&);
     NumArray& operator=(const NumArray&);
 };
+
+
+//------------------------------------------------------------------
+static NumArray* lastCreatedArray = 0;
 
 
 //------------------------------------------------------------------
@@ -59,13 +63,16 @@ void newArray(Dart_NativeArguments args)
 
     uint64_t numberOfBytes = sizeof(NumArray) + (arraySize - 1)*sizeof(double);
     NumArray* numArray = (NumArray *)new char [numberOfBytes];
+    lastCreatedArray = numArray;
     numArray->size = arraySize;
 
     // no userdata in Dart
-    char check_pointer_size[ (sizeof(NumArray*) == sizeof(int) ? 1 : -1) ];
+    char check_pointer_size[ (sizeof(NumArray*) == sizeof(int) ? 1 : -1) ]; (void)check_pointer_size;
     int ptr = reinterpret_cast<int>(numArray);
 
-    Dart_SetReturnValue(args, Dart_NewInteger(ptr)); 
+    Dart_SetReturnValue(args, Dart_NewInteger(ptr));
+
+    printf("newArray: array of size %i created.\n", (int)arraySize);
 }
 
 
@@ -136,6 +143,8 @@ void setAt(Dart_NativeArguments args)
     }
 
     numArray->values[index] = value;
+
+    printf("setAt: array->value[%i] = %f.\n", (int)index, value);
 }
 
 
@@ -161,7 +170,10 @@ static void getAt(Dart_NativeArguments args)
         return;
     }
 
-    Dart_SetReturnValue(args, Dart_NewDouble(numArray->values[index])); 
+    double value = numArray->values[index];
+    Dart_SetReturnValue(args, Dart_NewDouble(value));
+
+    printf("getAt: return array->value[%i]  (%f).\n", (int)index, value);
 }
 
 
@@ -176,14 +188,17 @@ static void getSize(Dart_NativeArguments args)
         return;
     }
 
-    Dart_SetReturnValue(args, Dart_NewInteger(numArray->size)); 
+
+    Dart_SetReturnValue(args, Dart_NewInteger(numArray->size));
+
+    printf("getSize: return array->size   (%i).\n", (int)numArray->size);
 }
 
 
 //------------------------------------------------------------------
 static Dart_Handle library_handler(Dart_LibraryTag tag,
                                    Dart_Handle library,
-                                   Dart_Handle url) 
+                                   Dart_Handle url)
 {
   if (tag == kCanonicalizeUrl) {
     return url;
@@ -193,7 +208,7 @@ static Dart_Handle library_handler(Dart_LibraryTag tag,
 
 
 //------------------------------------------------------------------
-static Dart_NativeFunction numArrayResolver(Dart_Handle name, int arg_count) 
+static Dart_NativeFunction numArrayResolver(Dart_Handle name, int arg_count)
 {
     const char* function_name = 0;
     Dart_Handle result = Dart_StringToCString(name, &function_name);
@@ -213,7 +228,7 @@ static Dart_NativeFunction numArrayResolver(Dart_Handle name, int arg_count)
 
     return 0;
 }
-                                                     
+
 
 
 //------------------------------------------------------------------
@@ -238,7 +253,7 @@ int main()
         ;
 
 
-    
+
     if (!Dart_SetVMFlags(0, 0)) {
         return 10;
     }
@@ -250,6 +265,9 @@ int main()
     // create an isolate
     char* err;
     Dart_Isolate isolate = Dart_CreateIsolate(0, 0, &err);
+    if (isolate == 0) {
+        return 21;
+    }
     Dart_Scope isolate_scope;
 
 
@@ -280,6 +298,13 @@ int main()
         return 60;
     }
 
+    if (lastCreatedArray) {
+      if (lastCreatedArray->values[0] == 12) {
+        printf("NumArray successfully manuipulated by Dart.\n");
+      } else {
+        printf("Erro when accessing NumArray from Dart.ßn");
+      }
+    }
     return 0;
 }
 
