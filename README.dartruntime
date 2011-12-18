@@ -79,8 +79,7 @@ git svn fetch
 TODO
 ----
 - cmake: install rules
-- embed example
-- add tests
+
 
 
 

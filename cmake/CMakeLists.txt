@@ -10,6 +10,10 @@ set(EXECUTABLE_OUTPUT_PATH  ${CMAKE_BINARY_DIR}/bin)
 set(LIBRARY_OUTPUT_PATH     ${CMAKE_BINARY_DIR}/lib)
 
 
+option(tests "Enable tests" ON)
+option(bind  "Enable binding tests" ON)
+
+
 project(dartruntime)
 
 include(TargetClass)
@@ -224,26 +228,39 @@ t_makeExecutable()
 # test
 #
 
-t_init(run_vm_tests)
-t_findSources(vm _test.cc)
-t_findSources(bin _test.cc)
-t_addSources(bin/run_vm_tests.cc)
-t_removeSources(ALL process_test )
-t_addDartFiles(vm/snapshot_test.dart)
-t_embedDartFiles(vm/snapshot_test_in.dat ${gen_dir}/snapshot_test.dat)
-t_includeDirectoriesAbsolute(${gen_dir})
-t_includeDirectories(. vm)
-t_addDefinitions(TESTING)
-t_linkLibraries(dart_corelib)
-t_makeExecutable()
+if(tests)
+    t_init(run_vm_tests)
+    t_findSources(vm _test.cc)
+    t_findSources(bin _test.cc)
+    t_addSources(bin/run_vm_tests.cc)
+    t_removeSources(ALL process_test )
+    t_addDartFiles(vm/snapshot_test.dart)
+    t_embedDartFiles(vm/snapshot_test_in.dat ${gen_dir}/snapshot_test.dat)
+    t_includeDirectoriesAbsolute(${gen_dir})
+    t_includeDirectories(. vm)
+    t_addDefinitions(TESTING)
+    t_linkLibraries(dart_corelib)
+    t_makeExecutable()
 
 
-message(STATUS)
-get_filename_component(rep_root ${t_top}/.. ABSOLUTE)
-message(STATUS "Run tests from the source folder: '${rep_root}' !")
-message(STATUS)
+    message(STATUS)
+    get_filename_component(rep_root ${t_top}/.. ABSOLUTE)
+    message(STATUS "Run tests from the source folder: '${rep_root}' !")
+    message(STATUS)
+endif()
 
 
+if(bind)
+    macro(p_addExecutables _dir)
+        foreach(_it ${ARGN})
+            t_init(${_dir}_${_it})
+            t_addSources(${_dir}/${_dir}_${_it}.cc)
+            t_linkLibraries(dart_corelib)
+            t_includeDirectories(include)
+            t_makeExecutable()
+        endforeach()
+    endmacro()
 
-
+    p_addExecutables(bind NativeFunction_foo NativeFunction_userdata)
+endif()
 
