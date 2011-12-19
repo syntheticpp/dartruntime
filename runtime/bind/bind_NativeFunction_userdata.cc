@@ -324,7 +324,7 @@ int main()
     }
 
     if (lastCreatedArray) {
-      if ((int)lastCreatedArray == 0xDeadBeef) {
+      if ((unsigned int)lastCreatedArray == 0xDeadBeef) {
         printf("NumArray successfully manipulated by Dart.\n");
       } else {
         printf("Error when accessing NumArray from Dart.\n");
