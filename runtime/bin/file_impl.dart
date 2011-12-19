@@ -48,6 +48,10 @@ class _FileInputStream implements FileInputStream {
     return _length - _file.positionSync();
   }
 
+  void pipe(OutputStream output, [bool close = true]) {
+    _pipe(this, output, close: close);
+  }
+
   bool closed() => _eof;
 
   void close() {
@@ -93,11 +97,11 @@ class _FileInputStream implements FileInputStream {
     if (!_closed) {
       if (available() > 0) {
         if (_scheduledDataCallback == null) {
-          _scheduledDataCallback = new Timer(issueDataCallback, 0, false);
+          _scheduledDataCallback = new Timer(issueDataCallback, 0);
         }
       } else if (!_eof) {
         if (_scheduledCloseCallback == null) {
-          _scheduledCloseCallback = new Timer(issueCloseCallback, 0, false);
+          _scheduledCloseCallback = new Timer(issueCloseCallback, 0);
           _eof = true;
         }
       }
@@ -110,8 +114,8 @@ class _FileInputStream implements FileInputStream {
   bool _closed = false;
   Timer _scheduledDataCallback;
   Timer _scheduledCloseCallback;
-  var _clientDataHandler;
-  var _clientCloseHandler;
+  Function _clientDataHandler;
+  Function _clientCloseHandler;
 }
 
 
