@@ -67,8 +67,8 @@ void newArray(Dart_NativeArguments args)
     numArray->size = arraySize;
 
     // no userdata in Dart
-    char check_pointer_size[ (sizeof(NumArray*) == sizeof(int) ? 1 : -1) ]; (void)check_pointer_size;
-    int ptr = reinterpret_cast<int>(numArray);
+    //char check_pointer_size[ (sizeof(NumArray*) == sizeof(int) ? 1 : -1) ]; (void)check_pointer_size;
+    int64_t ptr = reinterpret_cast<int64_t>(numArray);
 
     Dart_SetReturnValue(args, Dart_NewInteger(ptr));
 
