@@ -196,6 +196,27 @@ static void getSize(Dart_NativeArguments args)
 
 
 //------------------------------------------------------------------
+void deleteArray(Dart_NativeArguments args)
+{
+    Dart_Scope scope;
+
+    // NumArray
+    NumArray* numArray = toNumArray(Dart_GetNativeArgument(args, 0));
+    if (!numArray) {
+        return;
+    }
+
+    delete [] (char*) numArray;
+
+    lastCreatedArray = (NumArray*) 0xDeadBeef;
+    printf("deleteArray: array deleted\n");
+}
+
+
+
+
+
+//------------------------------------------------------------------
 static Dart_Handle library_handler(Dart_LibraryTag tag,
                                    Dart_Handle library,
                                    Dart_Handle url)
@@ -224,6 +245,8 @@ static Dart_NativeFunction numArrayResolver(Dart_Handle name, int arg_count)
         return &getAt;
     } else if (!strcmp(function_name, "getSize")) {
         return &getSize;
+    } else if (!strcmp(function_name, "deleteArray")) {
+        return &deleteArray;
     }
 
     return 0;
@@ -241,6 +264,7 @@ int main()
         "   static setAt(var array, var index, var value)   native \"setAt\";       \n"
         "   static getAt(var array, var index)              native \"getAt\";       \n"
         "   static getSize(var array)                       native \"getSize\";     \n"
+        "   static deleteArray(var array)                   native \"deleteArray\"; \n"
         "                                                                           \n"
         "   static foo() {                                                          \n"
         "       var array = NumArray.newArray(12);                                  \n"
@@ -248,6 +272,7 @@ int main()
         "       var d = getAt(array, 3);                                            \n"
         "       var size = getSize(array);                                          \n"
         "       setAt(array, 0, 1.0 * size);                                        \n"
+        "       deleteArray(array);                                                 \n"
         "   }                                                                       \n"
         "}                                                                          \n"
         ;
@@ -299,7 +324,7 @@ int main()
     }
 
     if (lastCreatedArray) {
-      if (lastCreatedArray->values[0] == 12) {
+      if ((int)lastCreatedArray == 0xDeadBeef) {
         printf("NumArray successfully manipulated by Dart.\n");
       } else {
         printf("Error when accessing NumArray from Dart.\n");
