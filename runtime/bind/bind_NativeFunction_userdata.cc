@@ -67,8 +67,7 @@ void newArray(Dart_NativeArguments args)
     numArray->size = arraySize;
 
     // no userdata in Dart
-    char check_pointer_size[ (sizeof(NumArray*) == sizeof(int) ? 1 : -1) ]; (void)check_pointer_size;
-    int ptr = reinterpret_cast<int>(numArray);
+    int64_t ptr = reinterpret_cast<int64_t>(numArray);
 
     Dart_SetReturnValue(args, Dart_NewInteger(ptr));
 
@@ -208,7 +207,7 @@ void deleteArray(Dart_NativeArguments args)
 
     delete [] (char*) numArray;
 
-    lastCreatedArray = (NumArray*) 0xDeadBeef;
+    lastCreatedArray = 0;
     printf("deleteArray: array deleted\n");
 }
 
@@ -323,13 +322,13 @@ int main()
         return 60;
     }
 
-    if (lastCreatedArray) {
-      if ((unsigned int)lastCreatedArray == 0xDeadBeef) {
-        printf("NumArray successfully manipulated by Dart.\n");
-      } else {
-        printf("Error when accessing NumArray from Dart.\n");
-      }
+
+    if (lastCreatedArray == 0) {
+      printf("NumArray successfully manipulated by Dart.\n");
+    } else {
+      printf("Error when accessing NumArray from Dart.\n");
     }
+
     return 0;
 }
 

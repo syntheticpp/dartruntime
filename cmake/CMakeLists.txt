@@ -12,7 +12,7 @@ set(LIBRARY_OUTPUT_PATH     ${CMAKE_BINARY_DIR}/lib)
 
 option(tests "Enable tests" ON)
 option(bind  "Enable binding tests" ON)
-
+option(x64   "Generate code for 64-bit" OFF)
 
 project(dartruntime)
 
@@ -55,8 +55,13 @@ if(CMAKE_COMPILER_IS_GNUCXX)
         set(warn "${warn} -Wno-conversion-null -Wvla")
     endif()
     if(LINUX)
+        if(x64)
+            set(arch 64)
+        else()
+            set(arch 32)
+        endif()
         set(librt -lrt)
-        set(multi "-m32 -MMD -fPIC ")
+        set(multi "-m${arch} -MMD -fPIC ")
     endif()
     if(APPLE)
         set(warn "${warn} -Wno-trigraphs -fmessage-length=0 -Wno-deprecated-declarations")
