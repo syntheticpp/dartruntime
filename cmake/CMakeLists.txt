@@ -266,6 +266,6 @@ if(bind)
         endforeach()
     endmacro()
 
-    p_addExecutables(bind NativeFunction_foo NativeFunction_userdata)
+    p_addExecutables(bind NativeFunction_foo NativeFunction_userdata NativeFunction_nativefield)
 endif()
 
