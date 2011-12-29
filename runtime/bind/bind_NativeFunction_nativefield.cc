@@ -7,6 +7,10 @@
 #include <cstring>
 #include <cstdio>
 
+//
+// Use "NativeWrapperClass" to wrap a pointer. No object orientation
+//
+
 
 //------------------------------------------------------------------
 class NumArray
@@ -50,7 +54,12 @@ void newArray(Dart_NativeArguments args)
 {
     Dart_Scope scope;
 
-    Dart_Handle argSize = Dart_GetNativeArgument(args, 0);
+    Dart_Handle wrapper = Dart_GetNativeArgument(args, 0);
+    if (!checkResult(wrapper)) {
+        return;
+    }
+
+    Dart_Handle argSize = Dart_GetNativeArgument(args, 1);
     if (!Dart_IsInteger(argSize)) {
         return;
     }
@@ -66,27 +75,44 @@ void newArray(Dart_NativeArguments args)
     lastCreatedArray = numArray;
     numArray->size = arraySize;
 
-    // no userdata in Dart
-    int64_t ptr = reinterpret_cast<int64_t>(numArray);
 
-    Dart_SetReturnValue(args, Dart_NewInteger(ptr));
+    Dart_Handle res = Dart_SetNativeInstanceField(wrapper, 0, reinterpret_cast<intptr_t>(numArray));
+    if (!checkResult(res)) {
+        return;
+    }
+
+    Dart_SetReturnValue(args, wrapper);
 
     printf("newArray: array of size %i created.\n", (int)arraySize);
 }
 
 
 //------------------------------------------------------------------
-NumArray* toNumArray(const Dart_Handle& handle)
+NumArray* toNumArray(const Dart_Handle& wrapper)
 {
-    if (!Dart_IsInteger(handle)) {
-        return 0 ;
+    Dart_Handle lib = Dart_LookupLibrary(Dart_NewString("dart:bind"));
+    if (!checkResult(lib)) {
+        return 0;
     }
-    uint64_t ptr = 0;
-    Dart_Handle result = Dart_IntegerToUint64(handle, &ptr);
+
+    Dart_Handle cls = Dart_GetClass(lib, Dart_NewString("NumArrayPointer"));
+    if (!checkResult(cls)) {
+        return 0;
+    }
+
+    // check if NumArrayPointer 
+    bool is_instance = false;
+    Dart_Handle result = Dart_ObjectIsType(wrapper, cls, &is_instance);
+    if (!is_instance || !checkResult(result)) {
+        return 0;
+    }
+
+    intptr_t ptr = 0;
+    result = Dart_GetNativeInstanceField(wrapper, 0, &ptr);
     if (!checkResult(result)) {
         return 0;
     }
-    // no userdata in Dart
+
     NumArray* numArray = reinterpret_cast<NumArray*>(ptr);
 
     return numArray;
@@ -257,16 +283,17 @@ static Dart_NativeFunction numArrayResolver(Dart_Handle name, int arg_count)
 int main()
 {
     const char* script =
-        "class NumArray                                                             \n"
+        "class NumArray extends NumArrayPointer                                     \n"
         "{                                                                          \n"
-        "   static newArray(var size)                       native \"newArray\";    \n"
+        "   static newArray(var array, var size)            native \"newArray\";    \n"
         "   static setAt(var array, var index, var value)   native \"setAt\";       \n"
         "   static getAt(var array, var index)              native \"getAt\";       \n"
         "   static getSize(var array)                       native \"getSize\";     \n"
         "   static deleteArray(var array)                   native \"deleteArray\"; \n"
         "                                                                           \n"
         "   static foo() {                                                          \n"
-        "       var array = NumArray.newArray(12);                                  \n"
+        "       NumArray array = new NumArray();                                    \n"
+        "       newArray(array, 12);                                                \n"
         "       setAt(array, 3, 1.5);                                               \n"
         "       var d = getAt(array, 3);                                            \n"
         "       var size = getSize(array);                                          \n"
@@ -296,7 +323,7 @@ int main()
 
 
     // Load
-    Dart_Handle url = Dart_NewString("dart:bind;");
+    Dart_Handle url = Dart_NewString("dart:bind");
     Dart_Handle source = Dart_NewString(script);
     Dart_Handle lib = Dart_LoadScript(url, source, library_handler);
     if (!checkResult(lib)) {
@@ -305,6 +332,11 @@ int main()
 
     if (!Dart_IsLibrary(lib)) {
         return 40;
+    }
+
+    Dart_Handle cls = Dart_CreateNativeWrapperClass(lib, Dart_NewString("NumArrayPointer"), 1);
+    if (!checkResult(cls)) {
+        return 45;
     }
 
     Dart_Handle result = Dart_SetNativeResolver(lib, &numArrayResolver);
