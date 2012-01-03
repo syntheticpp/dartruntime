@@ -53,9 +53,12 @@ const char* CanonicalFunction(const char* func) {
 // Return error if isolate is in an inconsistent state.
 // Return NULL when no error condition exists.
 const char* CheckIsolateState(Isolate* isolate, bool generating_snapshot) {
-  bool success = (generating_snapshot) ?
-      ClassFinalizer::FinalizePendingClassesForSnapshotCreation() :
-      ClassFinalizer::FinalizePendingClasses();
+  bool success = true;
+  if (!ClassFinalizer::AllClassesFinalized()) {
+    success = (generating_snapshot) ?
+        ClassFinalizer::FinalizePendingClassesForSnapshotCreation() :
+        ClassFinalizer::FinalizePendingClasses();
+  }
   if (success && !generating_snapshot) {
     success = isolate->object_store()->PreallocateObjects();
   }
@@ -305,7 +308,7 @@ uword Api::Reallocate(uword ptr, intptr_t old_size, intptr_t new_size) {
 // --- Handles ---
 
 
-DART_EXPORT bool Dart_IsError(const Dart_Handle& handle) {
+DART_EXPORT bool Dart_IsError(Dart_Handle handle) {
   DARTSCOPE(Isolate::Current());
   const Object& obj = Object::Handle(Api::UnwrapHandle(handle));
   return obj.IsApiError();
@@ -340,7 +343,7 @@ static const char* MakeUnhandledExceptionCString(
 }
 
 
-DART_EXPORT const char* Dart_GetError(const Dart_Handle& handle) {
+DART_EXPORT const char* Dart_GetError(Dart_Handle handle) {
   DARTSCOPE(Isolate::Current());
 
   const Object& obj = Object::Handle(Api::UnwrapHandle(handle));
@@ -650,7 +653,7 @@ DART_EXPORT Dart_Handle Dart_CreateSnapshot(uint8_t** buffer,
   isolate->object_store()->set_root_library(Library::Handle());
   SnapshotWriter writer(Snapshot::kFull, buffer, ApiAllocator);
   writer.WriteFullSnapshot();
-  *size = writer.Size();
+  *size = writer.BytesWritten();
   return Api::Success();
 }
 
@@ -679,7 +682,7 @@ DART_EXPORT Dart_Handle Dart_CreateScriptSnapshot(uint8_t** buffer,
   }
   ScriptSnapshotWriter writer(buffer, ApiAllocator);
   writer.WriteScriptSnapshot(library);
-  *size = writer.Size();
+  *size = writer.BytesWritten();
   return Api::Success();
 }
 

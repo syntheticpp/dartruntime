@@ -116,7 +116,7 @@ class OptimizingCodeGenerator : public CodeGenerator {
   void GenerateSmiBinaryOp(BinaryOpNode* node);
   void GenerateSmiShiftBinaryOp(BinaryOpNode* node);
 
-  void GenerateDoubleBinaryOp(BinaryOpNode* node);
+  void GenerateDoubleBinaryOp(BinaryOpNode* node, bool receiver_can_be_smi);
   void GenerateMintBinaryOp(BinaryOpNode* node, bool allow_smi);
   void CheckIfDoubleOrSmi(Register reg,
                           Register temp,
@@ -153,6 +153,9 @@ class OptimizingCodeGenerator : public CodeGenerator {
 
   bool IsResultInEaxRequested(AstNode* node) const;
   bool NodeMayBeSmi(AstNode* node) const;
+
+  void HandleResult(AstNode* node, Register result_reg);
+  void PropagateBackLocalClass(AstNode* node, const Class& cls);
 
   void PrintCollectedClassesAtId(AstNode* node, intptr_t id);
   void TraceOpt(AstNode* node, const char* message);

@@ -26,6 +26,10 @@ class ListInputStream extends _BaseDataInputStream implements InputStream {
     return bytesToRead;
   }
 
+  void _close() {
+    _offset = _buffer.length;
+  }
+
   List<int> _buffer;
   int _offset = 0;
 }
@@ -38,6 +42,9 @@ class DynamicListInputStream
   int available() => _bufferList.length;
 
   void write(List<int> data) {
+    if (_streamMarkedClosed) {
+      throw new StreamException.streamClosed();
+    }
     _bufferList.add(data);
     _checkScheduleCallbacks();
   }
@@ -57,6 +64,11 @@ class DynamicListInputStream
     return bytesToRead;
   }
 
+  void _close() {
+    _streamMarkedClosed = true;
+    _bufferList.clear();
+  }
+
   _BufferList _bufferList;
 }
 
@@ -71,12 +83,14 @@ class ListOutputStream implements OutputStream {
     } else {
       _bufferList.add(buffer);
     }
+    return true;
   }
 
   bool writeFrom(List<int> buffer, [int offset = 0, int len]) {
     if (_streamMarkedClosed) throw new StreamException.streamClosed();
     _bufferList.add(
         buffer.getRange(offset, (len == null) ? buffer.length - offset : len));
+    return true;
   }
 
   void close() {
