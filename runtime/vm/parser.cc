@@ -1849,9 +1849,7 @@ SequenceNode* Parser::ParseFunc(const Function& func,
   } else {
     UnexpectedToken();
   }
-
-  SequenceNode* statements = CloseBlock();
-  return statements;
+  return CloseBlock();
 }
 
 
