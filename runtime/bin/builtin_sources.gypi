@@ -57,7 +57,6 @@
     'fdutils.h',
     'fdutils_linux.cc',
     'fdutils_macos.cc',
-    'globals.h',
     'platform.cc',
     'platform.h',
     'platform_linux.cc',
