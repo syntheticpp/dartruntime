@@ -112,7 +112,7 @@ void BindNumberArray::newArray(Dart_NativeArguments args)
     }
 
     NumberArray* obj = new NumberArray(arraySize);
-    
+
     Dart_Handle res = Dart_SetNativeInstanceField(wrapper, 0, reinterpret_cast<intptr_t>(obj));
     if (!checkResult(res)) {
         return;
@@ -137,7 +137,7 @@ NumberArray* BindNumberArray::toNumberArray(const Dart_Handle& wrapper)
         return 0;
     }
 
-    // check if NumArrayPointer 
+    // check if NumberArrayPointer
     bool is_instance = false;
     Dart_Handle result = Dart_ObjectIsType(wrapper, cls, &is_instance);
     if (!is_instance || !checkResult(result)) {
@@ -186,13 +186,13 @@ void BindNumberArray::setAt(Dart_NativeArguments args)
         return;
     }
 
-    //index
+    // index
     bool ok;
     uint64_t index = toIndex(Dart_GetNativeArgument(args, 1), ok);
     if (!ok) {
         return;
     }
-    if (index < 0 || index >= obj->getSize()) {
+    if (index >= obj->getSize()) {
         printf("NumberArray::setAt(%i): wrong index.\n", (int)index);
         return;
     }
@@ -231,7 +231,7 @@ void BindNumberArray::getAt(Dart_NativeArguments args)
     if (!ok) {
         return;
     }
-    if (index < 0 || index >= obj->getSize()) {
+    if (index >= obj->getSize()) {
         printf("NumberArray::getAt(%i): wrong index.\n", (int)index);
         return;
     }
