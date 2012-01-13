@@ -1,4 +1,4 @@
-// Copyright (c) 2011, the Dart project authors.  Please see the AUTHORS file
+// Copyright (c) 2012, the Dart project authors.  Please see the AUTHORS file
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
@@ -245,9 +245,6 @@ Token::Kind Parser::CurrentToken() {
     token_kind_ = tokens_.KindAt(token_index_);
     if (token_kind_ == Token::kERROR) {
       ErrorMsg(token_index_, CurrentLiteral()->ToCString());
-    }
-    if (Token::IsPseudoKeyword(token_kind_) && !is_top_level_) {
-      token_kind_ = Token::kIDENT;
     }
   }
   CompilerStats::num_token_checks++;
@@ -637,7 +634,7 @@ SequenceNode* Parser::ParseStaticConstGetter(const Function& func) {
   AddFormalParamsToScope(&params, current_block_->scope);
 
   // Static const fields must have an initializer.
-  ExpectToken(Token::kIDENT);
+  ExpectIdentifier("field name expected");
   ExpectToken(Token::kASSIGN);
 
   // We don't want to use ParseConstExpr() here because we don't want
@@ -677,7 +674,7 @@ SequenceNode* Parser::ParseInstanceGetter(const Function& func) {
   LoadLocalNode* load_receiver = new LoadLocalNode(token_index_, *receiver);
   // token_index_ is the function's token position which points to the name of
   // the field;
-  ASSERT(CurrentToken() == Token::kIDENT);
+  ASSERT(IsIdentifier());
   const String& field_name = *CurrentLiteral();
   const Class& field_class = Class::Handle(func.owner());
   const Field& field =
@@ -813,7 +810,7 @@ void Parser::ParseFormalParameter(bool allow_explicit_default_value,
   if (parameter.type == NULL) {
     // At this point, we must see an identifier for the type or the
     // function parameter.
-    if (CurrentToken() != Token::kIDENT) {
+    if (!IsIdentifier()) {
       ErrorMsg("parameter name or type expected");
     }
     // We have not seen a parameter type yet, so we check if the next
@@ -823,7 +820,7 @@ void Parser::ParseFormalParameter(bool allow_explicit_default_value,
     // We either parse a type or assume that no type is specified.
     if ((follower == Token::kLT) ||  // Parameterized type.
         (follower == Token::kPERIOD) ||  // Qualified class name of type.
-        (follower == Token::kIDENT) ||  // Parameter name following a type.
+        Token::IsIdentifier(follower) ||  // Parameter name following a type.
         (follower == Token::kTHIS)) {  // Field parameter following a type.
       parameter.type = &AbstractType::ZoneHandle(
           ParseType(is_top_level_ ? kCanResolve : kMustResolve));
@@ -837,13 +834,11 @@ void Parser::ParseFormalParameter(bool allow_explicit_default_value,
     this_seen = true;
     parameter.is_field_initializer = true;
   }
+
   // At this point, we must see an identifier for the parameter name.
-  if (CurrentToken() != Token::kIDENT) {
-    ErrorMsg("parameter name expected");
-  }
-  parameter.name = CurrentLiteral();
   parameter.name_pos = token_index_;
-  ConsumeToken();
+  parameter.name = ExpectIdentifier("parameter name expected");
+
   if (parameter.is_field_initializer) {
     params->has_field_initializer = true;
   }
@@ -1386,7 +1381,7 @@ void Parser::ParseInitializedInstanceFields(const Class& cls,
       field ^= fields.At(i);
       intptr_t field_pos = field.token_index();
       SetPosition(field_pos);
-      ASSERT(CurrentToken() == Token::kIDENT);
+      ASSERT(IsIdentifier());
       ConsumeToken();
       ExpectToken(Token::kASSIGN);
       AstNode* init_expr = ParseConstExpr();
@@ -1917,7 +1912,7 @@ void Parser::SkipInitializers() {
 
 
 void Parser::ParseQualIdent(QualIdent* qual_ident) {
-  ASSERT(CurrentToken() == Token::kIDENT);
+  ASSERT(IsIdentifier());
   if (!is_top_level_) {
     bool is_local_ident = ResolveIdentInLocalScope(token_index_,
                                                    *CurrentLiteral(),
@@ -2272,11 +2267,13 @@ void Parser::ParseFieldDefinition(ClassDesc* members, MemberDesc* field) {
 void Parser::ParseClassMemberDefinition(ClassDesc* members) {
   MemberDesc member;
   current_member_ = &member;
-  if (CurrentToken() == Token::kABSTRACT) {
+  if ((CurrentToken() == Token::kABSTRACT) &&
+      (LookaheadToken(1) != Token::kLPAREN)) {
     ConsumeToken();
     member.has_abstract = true;
   }
-  if (CurrentToken() == Token::kSTATIC) {
+  if ((CurrentToken() == Token::kSTATIC) &&
+      (LookaheadToken(1) != Token::kLPAREN)) {
     ConsumeToken();
     member.has_static = true;
   }
@@ -2324,7 +2321,7 @@ void Parser::ParseClassMemberDefinition(ClassDesc* members) {
           (follower == Token::kGET) ||  // Getter following a type.
           (follower == Token::kSET) ||  // Setter following a type.
           (follower == Token::kOPERATOR) ||  // Operator following a type.
-          (follower == Token::kIDENT)  ||  // Member name following a type.
+          (Token::IsIdentifier(follower))  ||  // Member name following a type.
           ((follower == Token::kPERIOD) &&    // Qualified class name of type,
            (LookaheadToken(3) != Token::kLPAREN))) {  // but not a named constr.
         ASSERT(is_top_level_);
@@ -2333,7 +2330,7 @@ void Parser::ParseClassMemberDefinition(ClassDesc* members) {
     }
   }
   // Optionally parse a (possibly named) constructor name or factory.
-  if ((CurrentToken() == Token::kIDENT) &&
+  if (IsIdentifier() &&
       (CurrentLiteral()->Equals(members->class_name()) || member.has_factory)) {
     member.name = CurrentLiteral();
     member.name_pos = this->token_index_;
@@ -2403,13 +2400,17 @@ void Parser::ParseClassMemberDefinition(ClassDesc* members) {
     if (CurrentToken() != Token::kLPAREN) {
       ErrorMsg("left parenthesis expected");
     }
-  } else if (CurrentToken() == Token::kGET) {
+  } else if ((CurrentToken() == Token::kGET) &&
+             (LookaheadToken(1) != Token::kLPAREN) &&
+             !member.has_var && !member.has_final) {
     ConsumeToken();
     member.kind = RawFunction::kGetterFunction;
     member.name_pos = this->token_index_;
     member.name = ExpectIdentifier("identifier expected");
     // If the result type was not specified, it will be set to DynamicType.
-  } else if (CurrentToken() == Token::kSET) {
+  } else if ((CurrentToken() == Token::kSET) &&
+             (LookaheadToken(1) != Token::kLPAREN) &&
+             !member.has_var && !member.has_final)  {
     ConsumeToken();
     member.kind = RawFunction::kSetterFunction;
     member.name_pos = this->token_index_;
@@ -2419,7 +2420,9 @@ void Parser::ParseClassMemberDefinition(ClassDesc* members) {
     if (member.type == NULL) {
       member.type = &Type::ZoneHandle(Type::DynamicType());
     }
-  } else if (CurrentToken() == Token::kOPERATOR) {
+  } else if ((CurrentToken() == Token::kOPERATOR) &&
+             (LookaheadToken(1) != Token::kLPAREN) &&
+             !member.has_var && !member.has_final) {
     ConsumeToken();
     if (!Token::CanBeOverloaded(CurrentToken())) {
       ErrorMsg("invalid operator overloading");
@@ -2432,7 +2435,7 @@ void Parser::ParseClassMemberDefinition(ClassDesc* members) {
     member.name =
         &String::ZoneHandle(String::NewSymbol(Token::Str(CurrentToken())));
     ConsumeToken();
-  } else if (CurrentToken() == Token::kIDENT) {
+  } else if (IsIdentifier()) {
     member.name = CurrentLiteral();
     member.name_pos = token_index_;
     ConsumeToken();
@@ -2482,7 +2485,7 @@ void Parser::ParseClassDefinition(GrowableArray<const Class*>* classes) {
   const intptr_t class_pos = token_index_;
   ExpectToken(Token::kCLASS);
   const intptr_t classname_pos = token_index_;
-  String& class_name = *ExpectIdentifier("class name expected");
+  String& class_name = *ExpectTypeIdentifier("class name expected");
   if (FLAG_trace_parser) {
     OS::Print("TopLevel parsing class '%s'\n", class_name.ToCString());
   }
@@ -2624,14 +2627,12 @@ void Parser::CheckConstructors(ClassDesc* class_desc) {
 // and the alias name of a function type alias.
 // Token position remains unchanged.
 bool Parser::IsFunctionTypeAliasName() {
-  if ((CurrentToken() == Token::kIDENT) &&
-      (LookaheadToken(1) == Token::kLPAREN)) {
+  if (IsIdentifier() && (LookaheadToken(1) == Token::kLPAREN)) {
     return true;
   }
   const intptr_t saved_pos = token_index_;
   bool is_alias_name = false;
-  if ((CurrentToken() == Token::kIDENT)  &&
-      (LookaheadToken(1) == Token::kLT)) {
+  if (IsIdentifier() && (LookaheadToken(1) == Token::kLT)) {
     ConsumeToken();
     if (IsTypeParameter() && (CurrentToken() == Token::kLPAREN)) {
       is_alias_name = true;
@@ -2655,12 +2656,9 @@ void Parser::ParseFunctionTypeAlias(GrowableArray<const Class*>* classes) {
     result_type = ParseType(kDoNotResolve);  // No owner class yet.
   }
 
-  if (CurrentToken() != Token::kIDENT) {
-    ErrorMsg("function alias name expected");
-  }
   const intptr_t alias_name_pos = token_index_;
-  const String* alias_name = CurrentLiteral();
-  ConsumeToken();
+  const String* alias_name =
+      ExpectTypeIdentifier("function alias name expected");
 
   // Allocate an interface to hold the type parameters and their 'extends'
   // constraints. Make it the owner of the function type descriptor.
@@ -2737,7 +2735,7 @@ void Parser::ParseInterfaceDefinition(GrowableArray<const Class*>* classes) {
   const intptr_t interface_pos = token_index_;
   ExpectToken(Token::kINTERFACE);
   const intptr_t interfacename_pos = token_index_;
-  String& interface_name = *ExpectIdentifier("interface name expected");
+  String& interface_name = *ExpectTypeIdentifier("interface name expected");
   if (FLAG_trace_parser) {
     OS::Print("TopLevel parsing interface '%s'\n", interface_name.ToCString());
   }
@@ -2870,10 +2868,8 @@ void Parser::ParseInterfaceDefinition(GrowableArray<const Class*>* classes) {
 void Parser::ConsumeRightAngleBracket() {
   if (token_kind_ == Token::kGT) {
     ConsumeToken();
-  } else if (token_kind_ == Token::kSAR) {
-    token_kind_ = Token::kGT;
   } else if (token_kind_ == Token::kSHR) {
-    token_kind_ = Token::kSAR;
+    token_kind_ = Token::kGT;
   } else {
     UNREACHABLE();
   }
@@ -2887,9 +2883,7 @@ void Parser::SkipTypeArguments() {
       SkipType(false);
     } while (CurrentToken() == Token::kCOMMA);
     Token::Kind token = CurrentToken();
-    if ((token == Token::kGT) ||
-        (token == Token::kSAR) ||
-        (token == Token::kSHR)) {
+    if ((token == Token::kGT) || (token == Token::kSHR)) {
       ConsumeRightAngleBracket();
     } else {
       ErrorMsg("right angle bracket expected");
@@ -2936,9 +2930,7 @@ void Parser::ParseTypeParameters(const Class& cls) {
       type_parameter_extends.Add(&type_extends);
     } while (CurrentToken() == Token::kCOMMA);
     Token::Kind token = CurrentToken();
-    if ((token == Token::kGT) ||
-        (token == Token::kSAR) ||
-        (token == Token::kSHR)) {
+    if ((token == Token::kGT) || (token == Token::kSHR)) {
       ConsumeRightAngleBracket();
     } else {
       ErrorMsg("right angle bracket expected");
@@ -2970,9 +2962,7 @@ RawAbstractTypeArguments* Parser::ParseTypeArguments(
       types.Add(&type);
     } while (CurrentToken() == Token::kCOMMA);
     Token::Kind token = CurrentToken();
-    if ((token == Token::kGT) ||
-        (token == Token::kSAR) ||
-        (token == Token::kSHR)) {
+    if ((token == Token::kGT) || (token == Token::kSHR)) {
       ConsumeRightAngleBracket();
     } else {
       ErrorMsg("right angle bracket expected");
@@ -3288,9 +3278,7 @@ void Parser::ParseLibraryImport() {
     String& prefix = String::Handle();
     if (CurrentToken() == Token::kCOMMA) {
       ConsumeToken();
-      const String& kPrefix = String::Handle(String::NewSymbol("prefix"));
-      if ((CurrentToken() != Token::kIDENT) ||
-          !kPrefix.Equals(*CurrentLiteral())) {
+      if (!IsLiteral("prefix")) {
         ErrorMsg("prefix: expected");
       }
       ConsumeToken();
@@ -3389,7 +3377,8 @@ void Parser::ParseTopLevel() {
     set_current_class(Class::Handle());  // No current class.
     if (CurrentToken() == Token::kCLASS) {
       ParseClassDefinition(&classes);
-    } else if (CurrentToken() == Token::kTYPEDEF) {
+    } else if ((CurrentToken() == Token::kTYPEDEF) &&
+               (LookaheadToken(1) != Token::kLPAREN)) {
       ParseFunctionTypeAlias(&classes);
     } else if (CurrentToken() == Token::kINTERFACE) {
       ParseInterfaceDefinition(&classes);
@@ -3626,7 +3615,7 @@ AstNode* Parser::CallGetter(intptr_t token_index,
 AstNode* Parser::ParseVariableDeclaration(
     const AbstractType& type, bool is_final) {
   TRACE_PARSER("ParseVariableDeclaration");
-  ASSERT(CurrentToken() == Token::kIDENT);
+  ASSERT(IsIdentifier());
   const intptr_t ident_pos = token_index_;
   LocalVariable* variable =
       new LocalVariable(ident_pos, *CurrentLiteral(), type);
@@ -3679,7 +3668,7 @@ RawAbstractType* Parser::ParseFinalVarOrType(
     if (type_specification == kIsOptional) {
       return Type::DynamicType();
     } else {
-      ErrorMsg("identifier expected");
+      ErrorMsg("type name expected");
     }
   }
   if (type_specification == kIsOptional) {
@@ -3688,7 +3677,7 @@ RawAbstractType* Parser::ParseFinalVarOrType(
     // We either parse a type or return now.
     if ((follower != Token::kLT) &&  // Parameterized type.
         (follower != Token::kPERIOD) &&  // Qualified class name of type.
-        (follower != Token::kIDENT) &&  // Variable name following a type.
+        !Token::IsIdentifier(follower) &&  // Variable name following a type.
         (follower != Token::kTHIS)) {  // Field parameter following a type.
       return Type::DynamicType();
     }
@@ -3705,7 +3694,7 @@ AstNode* Parser::ParseVariableDeclarationList() {
   bool is_final = (CurrentToken() == Token::kFINAL);
   const AbstractType& type = AbstractType::ZoneHandle(
       ParseFinalVarOrType(kIsMandatory, kMustResolve));
-  if (CurrentToken() != Token::kIDENT) {
+  if (!IsIdentifier()) {
     ErrorMsg("identifier expected");
   }
 
@@ -3713,7 +3702,7 @@ AstNode* Parser::ParseVariableDeclarationList() {
   ASSERT(initializers != NULL);
   while (CurrentToken() == Token::kCOMMA) {
     ConsumeToken();
-    if (CurrentToken() != Token::kIDENT) {
+    if (!IsIdentifier()) {
       ErrorMsg("identifier expected after comma");
     }
     // We have a second initializer. Allocate a sequence node now.
@@ -3743,7 +3732,7 @@ AstNode* Parser::ParseFunctionStatement(bool is_literal) {
     result_type = ParseType(kMustResolve);
   }
   const intptr_t ident_pos = token_index_;
-  if (CurrentToken() == Token::kIDENT) {
+  if (IsIdentifier()) {
     variable_name = CurrentLiteral();
     function_name = variable_name;
     ConsumeToken();
@@ -3911,10 +3900,8 @@ bool Parser::IsTypeParameter() {
         nesting_level++;
       } else if (CurrentToken() == Token::kGT) {
         nesting_level--;
-      } else if (CurrentToken() == Token::kSAR) {
-        nesting_level -= 2;
       } else if (CurrentToken() == Token::kSHR) {
-        nesting_level -= 3;
+        nesting_level -= 2;
       } else if (CurrentToken() == Token::kIDENT) {
         // Check to see if it is a qualified identifier.
         if (LookaheadToken(1) == Token::kPERIOD) {
@@ -3933,6 +3920,12 @@ bool Parser::IsTypeParameter() {
     }
   }
   return true;
+}
+
+
+// Returns true if the current token is kIDENT or a pseudo-keyword.
+bool Parser::IsIdentifier() {
+  return Token::IsIdentifier(CurrentToken());
 }
 
 
@@ -3979,12 +3972,13 @@ bool Parser::IsVariableDeclaration() {
     return true;
   }
   if (CurrentToken() != Token::kIDENT) {
+    // Not a legal type identifier.
     return false;
   }
   const intptr_t saved_pos = token_index_;
   bool is_var_decl = false;
   if (IsOptionalType()) {
-    if (CurrentToken() == Token::kIDENT) {
+    if (IsIdentifier()) {
       ConsumeToken();
       if ((CurrentToken() == Token::kSEMICOLON) ||
           (CurrentToken() == Token::kCOMMA) ||
@@ -4008,9 +4002,8 @@ bool Parser::IsFunctionDeclaration() {
 bool Parser::IsTopLevelFunction() {
   // Top-level function declarations can omit the return type. Check for
   // that case separately.
-  return ((CurrentToken() == Token::kIDENT) &&
-      (LookaheadToken(1) == Token::kLPAREN)) ||
-      IsFunctionDeclaration();
+  return (IsIdentifier() &&
+      (LookaheadToken(1) == Token::kLPAREN)) || IsFunctionDeclaration();
 }
 
 
@@ -4021,7 +4014,7 @@ bool Parser::IsTopLevelAccessor() {
   const intptr_t saved_pos = token_index_;
   if (IsReturnType()) {
     if ((CurrentToken() == Token::kGET) || (CurrentToken() == Token::kSET)) {
-      if (LookaheadToken(1) == Token::kIDENT) {  // Accessor name.
+      if (Token::IsIdentifier(LookaheadToken(1))) {  // Accessor name.
         SetPosition(saved_pos);
         return true;
       }
@@ -4038,11 +4031,10 @@ bool Parser::IsFunctionLiteral() {
   }
   const intptr_t saved_pos = token_index_;
   bool is_function_literal = false;
-  if ((CurrentToken() == Token::kIDENT) &&
-      (LookaheadToken(1) == Token::kLPAREN)) {
+  if (IsIdentifier() && (LookaheadToken(1) == Token::kLPAREN)) {
     ConsumeToken();  // Consume function identifier.
   } else if (IsReturnType()) {
-    if (CurrentToken() != Token::kIDENT) {
+    if (!IsIdentifier()) {
       SetPosition(saved_pos);
       return false;
     }
@@ -4069,11 +4061,11 @@ bool Parser::IsForInStatement() {
   if (CurrentToken() == Token::kVAR || CurrentToken() == Token::kFINAL) {
     ConsumeToken();
   }
-  if (CurrentToken() == Token::kIDENT) {
+  if (IsIdentifier()) {
     if (LookaheadToken(1) == Token::kIN) {
       result = true;
     } else if (IsOptionalType()) {
-      if (CurrentToken() == Token::kIDENT) {
+      if (IsIdentifier()) {
         ConsumeToken();
       }
       result = (CurrentToken() == Token::kIN);
@@ -4224,8 +4216,7 @@ CaseNode* Parser::ParseCaseClause(LocalVariable* switch_expr_value,
     // clause. If we see 'case' or 'default', optionally preceeded by
     // a label, or closing brace, we stop parsing statements.
     Token::Kind next_token;
-    if (CurrentToken() == Token::kIDENT &&
-        LookaheadToken(1) == Token::kCOLON) {
+    if (IsIdentifier() && LookaheadToken(1) == Token::kCOLON) {
       next_token = LookaheadToken(2);
     } else {
       next_token = CurrentToken();
@@ -4298,8 +4289,7 @@ AstNode* Parser::ParseSwitchStatement(String* label_name) {
   while (true) {
     // Check for statement label
     SourceLabel* case_label = NULL;
-    if (CurrentToken() == Token::kIDENT &&
-        LookaheadToken(1) == Token::kCOLON) {
+    if (IsIdentifier() && LookaheadToken(1) == Token::kCOLON) {
       // Case statements start with a label.
       String* label_name = CurrentLiteral();
       const intptr_t label_pos = token_index_;
@@ -4658,12 +4648,8 @@ void Parser::ParseCatchParameter(CatchParamDesc* catch_param) {
   catch_param->is_final = (CurrentToken() == Token::kFINAL);
   catch_param->type = &AbstractType::ZoneHandle(
       ParseFinalVarOrType(kIsMandatory, kMustResolve));
-  if (CurrentToken() != Token::kIDENT) {
-    ErrorMsg("identifier expected");
-  }
   catch_param->token_index = token_index_;
-  catch_param->var = CurrentLiteral();
-  ConsumeToken();
+  catch_param->var = ExpectIdentifier("identifier expected");
 }
 
 
@@ -4998,7 +4984,7 @@ AstNode* Parser::ParseJump(String* label_name) {
   const intptr_t jump_pos = token_index_;
   SourceLabel* target = NULL;
   ConsumeToken();
-  if (CurrentToken() == Token::kIDENT) {
+  if (IsIdentifier()) {
     // Explicit label after break/continue.
     const String& target_name = *CurrentLiteral();
     ConsumeToken();
@@ -5054,12 +5040,22 @@ AstNode* Parser::ParseJump(String* label_name) {
 }
 
 
+bool Parser::IsDefinedInLexicalScope(const String& ident) {
+  if (ResolveIdentInLocalScope(token_index_, ident, NULL)) {
+    return true;
+  }
+  Object& obj = Object::Handle();
+  obj = library_.LookupObject(ident);
+  return !obj.IsNull();
+}
+
+
 AstNode* Parser::ParseStatement() {
   TRACE_PARSER("ParseStatement");
   AstNode* statement = NULL;
   intptr_t label_pos = 0;
   String* label_name = NULL;
-  if (CurrentToken() == Token::kIDENT) {
+  if (IsIdentifier()) {
     if (LookaheadToken(1) == Token::kCOLON) {
       // Statement starts with a label.
       label_name = CurrentLiteral();
@@ -5098,7 +5094,8 @@ AstNode* Parser::ParseStatement() {
     ExpectSemicolon();
   } else if (CurrentToken() == Token::kIF) {
     statement = ParseIfStatement(label_name);
-  } else if (CurrentToken() == Token::kASSERT) {
+  } else if ((CurrentToken() == Token::kASSERT) &&
+             !IsDefinedInLexicalScope(*CurrentLiteral())) {
     statement = ParseAssertStatement();
     ExpectSemicolon();
   } else if (IsVariableDeclaration()) {
@@ -5324,8 +5321,18 @@ void Parser::UnexpectedToken() {
 }
 
 
-String* Parser::ExpectIdentifier(const char* msg) {
+String* Parser::ExpectTypeIdentifier(const char* msg) {
   if (CurrentToken() != Token::kIDENT) {
+    ErrorMsg(msg);
+  }
+  String* ident = CurrentLiteral();
+  ConsumeToken();
+  return ident;
+}
+
+// Check whether current token is an identifier or a built-in identifier.
+String* Parser::ExpectIdentifier(const char* msg) {
+  if (!IsIdentifier()) {
     ErrorMsg(msg);
   }
   String* ident = CurrentLiteral();
@@ -5337,8 +5344,7 @@ String* Parser::ExpectIdentifier(const char* msg) {
 bool Parser::IsLiteral(const char* literal) {
   const uint8_t* characters = reinterpret_cast<const uint8_t*>(literal);
   intptr_t len = strlen(literal);
-  return (CurrentToken() == Token::kIDENT)
-      && CurrentLiteral()->Equals(characters, len);
+  return IsIdentifier() && CurrentLiteral()->Equals(characters, len);
 }
 
 
@@ -5577,12 +5583,10 @@ AstNode* Parser::ExpandAssignableOp(intptr_t op_pos,
       return new BinaryOpNode(op_pos, Token::kDIV, lhs, rhs);
     case Token::kASSIGN_MOD:
       return new BinaryOpNode(op_pos, Token::kMOD, lhs, rhs);
-    case Token::kASSIGN_SAR:
-      return new BinaryOpNode(op_pos, Token::kSAR, lhs, rhs);
-    case Token::kASSIGN_SHL:
-      return new BinaryOpNode(op_pos, Token::kSHL, lhs, rhs);
     case Token::kASSIGN_SHR:
       return new BinaryOpNode(op_pos, Token::kSHR, lhs, rhs);
+    case Token::kASSIGN_SHL:
+      return new BinaryOpNode(op_pos, Token::kSHL, lhs, rhs);
     case Token::kASSIGN_OR:
       return new BinaryOpNode(op_pos, Token::kBIT_OR, lhs, rhs);
     case Token::kASSIGN_AND:
@@ -5716,8 +5720,7 @@ ArgumentListNode* Parser::ParseActualParameters(
       ASSERT((CurrentToken() == Token::kLPAREN) ||
              (CurrentToken() == Token::kCOMMA));
       ConsumeToken();
-      if ((CurrentToken() == Token::kIDENT) &&
-          (LookaheadToken(1) == Token::kCOLON)) {
+      if (IsIdentifier() && (LookaheadToken(1) == Token::kCOLON)) {
         named_argument_seen = true;
         // The canonicalization of the argument descriptor array built in the
         // code generator requires that the names are symbols, i.e.
@@ -7101,7 +7104,7 @@ AstNode* Parser::ParseNewOperator() {
   ASSERT((CurrentToken() == Token::kNEW) || (CurrentToken() == Token::kCONST));
   bool is_const = (CurrentToken() == Token::kCONST);
   ConsumeToken();
-  if (CurrentToken() != Token::kIDENT) {
+  if (!IsIdentifier()) {
     ErrorMsg("type name expected");
   }
 
@@ -7362,7 +7365,7 @@ AstNode* Parser::ParsePrimary() {
     OpenBlock();
     primary = ParseFunctionStatement(true);
     CloseBlock();
-  } else if (CurrentToken() == Token::kIDENT) {
+  } else if (IsIdentifier()) {
     QualIdent qual_ident;
     ParseQualIdent(&qual_ident);
     if (qual_ident.is_local_scope_ident) {
@@ -7498,7 +7501,7 @@ const Instance& Parser::EvaluateConstExpr(AstNode* expr) {
 
 
 void Parser::SkipFunctionLiteral() {
-  if (CurrentToken() == Token::kIDENT) {
+  if (IsIdentifier()) {
     if (LookaheadToken(1) != Token::kLPAREN) {
       SkipType(true);
     }
@@ -7576,7 +7579,7 @@ void Parser::SkipCompoundLiteral() {
 
 void Parser::SkipNewOperator() {
   ConsumeToken();  // Skip new or const keyword.
-  if (CurrentToken() == Token::kIDENT) {
+  if (IsIdentifier()) {
     SkipType(false);
     if (CurrentToken() == Token::kLPAREN) {
       SkipActualParameters();
@@ -7656,8 +7659,12 @@ void Parser::SkipPrimary() {
       SkipCompoundLiteral();
       break;
     default:
-      UnexpectedToken();
-      UNREACHABLE();
+      if (IsIdentifier()) {
+        ConsumeToken();  // Handle pseudo-keyword identifiers.
+      } else {
+        UnexpectedToken();
+        UNREACHABLE();
+      }
       break;
   }
 }
