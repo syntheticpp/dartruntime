@@ -122,7 +122,7 @@ void BindNumberArray::newArray(Dart_NativeArguments args)
 
     // register destructor
     Dart_Handle weak_ref = Dart_NewWeakPersistentHandle(wrapper, (void*)obj, BindNumberArray::deleteArray);
-    if (!checkResult(res)) {
+    if (!checkResult(weak_ref)) {
         return;
     }
 
@@ -343,7 +343,7 @@ int main()
 
     Dart_EnterScope();
 
-    
+
 
     // Load
     Dart_Handle url = Dart_NewString("dart:bind");
