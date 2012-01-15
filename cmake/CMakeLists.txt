@@ -262,6 +262,7 @@ if(bind)
             t_addSources(${_dir}/${_dir}_${_it}.cc)
             t_linkLibraries(dart_corelib)
             t_includeDirectories(include)
+            t_includeDirectories(.) # needed because dart_api.h isn't complete
             t_makeExecutable()
         endforeach()
     endmacro()

@@ -4,6 +4,8 @@
 
 #include <dart_api.h>
 
+#include "vm/dart_api_impl.h"
+
 #include <cstring>
 #include <cstdio>
 
@@ -81,7 +83,7 @@ namespace BindNumberArray
     void getAt(Dart_NativeArguments args);
     void getSize(Dart_NativeArguments args);
     void newArray(Dart_NativeArguments args);
-    void deleteArray(Dart_NativeArguments args);
+    void deleteArray(void* peer);
 
     uint64_t toIndex(const Dart_Handle& handle, bool& ok);
     NumberArray* toNumberArray(const Dart_Handle& wrapper);
@@ -114,6 +116,12 @@ void BindNumberArray::newArray(Dart_NativeArguments args)
     NumberArray* obj = new NumberArray(arraySize);
 
     Dart_Handle res = Dart_SetNativeInstanceField(wrapper, 0, reinterpret_cast<intptr_t>(obj));
+    if (!checkResult(res)) {
+        return;
+    }
+
+    // register destructor
+    Dart_Handle weak_ref = Dart_NewWeakPersistentHandle(wrapper, (void*)obj, BindNumberArray::deleteArray);
     if (!checkResult(res)) {
         return;
     }
@@ -261,16 +269,9 @@ void BindNumberArray::getSize(Dart_NativeArguments args)
 
 
 //------------------------------------------------------------------
-void BindNumberArray::deleteArray(Dart_NativeArguments args)
+void BindNumberArray::deleteArray(void* peer)
 {
-    Dart_Scope scope;
-
-    // instance
-    NumberArray* obj = toNumberArray(Dart_GetNativeArgument(args, 0));
-    if (!obj) {
-        return;
-    }
-
+    NumberArray* obj = reinterpret_cast<NumberArray*>(peer);
     delete obj;
 
     printf("NumberArray deleted.\n");
@@ -294,8 +295,6 @@ Dart_NativeFunction BindNumberArray::numArrayResolver(Dart_Handle name, int arg_
         return &getAt;
     } else if (!strcmp(function_name, "getSize")) {
         return &getSize;
-    } else if (!strcmp(function_name, "deleteArray")) {
-        return &deleteArray;
     }
 
     return 0;
@@ -314,7 +313,6 @@ int main()
         "   setAt(var index, var value)      native \"setAt\";          \n"
         "   getAt(var index)                 native \"getAt\";          \n"
         "   getSize()                        native \"getSize\";        \n"
-        "   deleteArray()                    native \"deleteArray\";    \n"
         "                                                               \n"
         "   static foo() {                                              \n"
         "       NumberArray array = new NumberArray(12);                \n"
@@ -324,7 +322,6 @@ int main()
         "       var d = array.getAt(index);                             \n"
         "       var size = array.getSize();                             \n"
         "       array.setAt(0, 1.0 * size);                             \n"
-        "       array.deleteArray(); // no destructor?                  \n"
         "   }                                                           \n"
         "}                                                              \n"
         ;
@@ -343,8 +340,10 @@ int main()
     if (isolate == 0) {
         return 21;
     }
-    Dart_Scope isolate_scope;
 
+    Dart_EnterScope();
+
+    
 
     // Load
     Dart_Handle url = Dart_NewString("dart:bind");
@@ -377,6 +376,14 @@ int main()
     if (!checkResult(result)) {
         return 60;
     }
+
+    Dart_ExitScope();
+
+    // cleanup
+    dart::Isolate::Current()->heap()->CollectGarbage(dart::Heap::kNew); // BUG?
+    Dart_ShutdownIsolate();
+
+
 
 
     return 0;
