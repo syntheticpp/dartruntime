@@ -18,6 +18,6 @@ set(multi "-arch ${arch} -isysroot ${CMAKE_OSX_SYSROOT}")
 
 set(warn "${warn} -Wno-trigraphs -fmessage-length=0 -Wno-deprecated-declarations")
 
-
+set(libopenssl -lpthread -lcrypto)
 
 # Clang?
