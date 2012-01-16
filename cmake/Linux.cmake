@@ -6,11 +6,12 @@ set(LINUX 1)
 
 include(Gcc)
 
-if(x64)
-    set(arch 64)
-else()
+if(ia32)
     set(arch 32)
+elseif(x64)
+    set(arch 64)
 endif()
+
 set(multi "-m${arch} -MMD ")
 
 set(link "${link} -fPIC")

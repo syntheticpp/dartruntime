@@ -12,7 +12,18 @@ set(LIBRARY_OUTPUT_PATH     ${CMAKE_BINARY_DIR}/lib)
 
 option(tests "Enable tests" ON)
 option(bind  "Enable binding tests" ON)
-option(x64   "Generate code for 64-bit" OFF)
+option(arch  "Build for ia32, x64, or Arm" OFF)
+
+if(arch STREQUAL x64)
+    set(x64 1)
+elseif(arch STREQUAL arm)
+    set(arm 1)
+else()
+    set(arch ia32)
+    set(ia32 1)
+endif()
+message(STATUS "Building for architecture ${arch}")
+
 
 project(dartruntime)
 
