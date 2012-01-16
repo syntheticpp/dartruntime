@@ -30,4 +30,5 @@ if(MSVC)
     add_definitions(-D_CRT_SECURE_NO_DEPRECATE -D_CRT_NONSTDC_NO_DEPRECATE)
     # disable checked iterators for msvc release builds to get maximum speed
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /D_SECURE_SCL=0")
+    set(librt ws2_32 Rpcrt4)
 endif()

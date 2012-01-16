@@ -16,5 +16,6 @@ set(multi "-m${arch} -MMD ")
 set(link "${link} -fPIC")
 set(librt -lrt)
 
-
+# Use FindOpenssl
+set(libopenssl -lpthread -lcrypto)
 
