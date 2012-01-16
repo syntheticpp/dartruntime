@@ -1,11 +1,12 @@
-// Copyright (c) 2011, the Dart project authors.  Please see the AUTHORS file
+// Copyright (c) 2012, the Dart project authors.  Please see the AUTHORS file
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-#ifndef VM_UTILS_H_
-#define VM_UTILS_H_
+#ifndef PLATFORM_UTILS_H_
+#define PLATFORM_UTILS_H_
 
-#include "vm/assert.h"
+#include "platform/assert.h"
+#include "platform/globals.h"
 
 namespace dart {
 
@@ -151,4 +152,4 @@ class Utils {
 
 }  // namespace dart
 
-#endif  // VM_UTILS_H_
+#endif  // PLATFORM_UTILS_H_

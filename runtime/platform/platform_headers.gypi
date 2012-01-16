@@ -2,10 +2,13 @@
 # for details. All rights reserved. Use of this source code is governed by a
 # BSD-style license that can be found in the LICENSE file.
 
-# This file contains sources shared between the vm and bin components.
+# This file contains headers shared between the vm and bin components.
 {
   'sources': [
-    'assert.cc',
-    'utils.cc',
+    'assert.h',
+    'c99_support_win.h',
+    'globals.h',
+    'inttypes_support_win.h',
+    'utils.h',
   ],
 }
