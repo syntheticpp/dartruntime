@@ -142,6 +142,8 @@ t_makeLibrary()
 t_init(dart_lib)
 t_findHeaders(lib .h)
 t_findSources(lib .cc)
+t_findSources(platform .h)
+t_findSources(platform .cc)
 t_includeDirectories(.)
 t_makeLibrary()
 
