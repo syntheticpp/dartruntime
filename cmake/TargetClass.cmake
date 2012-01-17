@@ -54,6 +54,13 @@ macro(t_removeSources _sys)
 endmacro()
 
 
+macro(t_removeForeignOsSources)
+    t_removeSources(LINUX _win _macos)
+    t_removeSources(APPLE _win _linux)
+    t_removeSources(WIN32 _macos _linux _posix)
+endmacro()
+
+
 macro(t_findSources _subdir _ending)
     set(_dir ${t_top}/${_subdir})
     file(GLOB _files ${_dir}/*${_ending})
