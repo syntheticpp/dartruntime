@@ -80,15 +80,13 @@ class Parser : ValueObject {
 
   static void ParseFunction(ParsedFunction* parsed_function);
 
-  // Format an error or warning message into the message_buffer.
+  // Build an error object containing a formatted error or warning message.
   // A null script means no source and a negative token_index means no position.
-  static void FormatMessage(const Script& script,
-                            intptr_t token_index,
-                            const char* message_header,
-                            char* message_buffer,
-                            intptr_t message_buffer_size,
-                            const char* format,
-                            va_list args);
+  static RawError* FormatError(const Script& script,
+                               intptr_t token_index,
+                               const char* message_header,
+                               const char* format,
+                               va_list args);
 
  private:
   struct Block;
@@ -172,6 +170,16 @@ class Parser : ValueObject {
     Function& constructor,
     const AbstractTypeArguments& type_arguments);
 
+  // Format an error or warning message into the message_buffer.
+  // A null script means no source and a negative token_index means no position.
+  static void FormatMessage(const Script& script,
+                            intptr_t token_index,
+                            const char* message_header,
+                            char* message_buffer,
+                            intptr_t message_buffer_size,
+                            const char* format,
+                            va_list args);
+
   // Reports error message at location of current token.
   void ErrorMsg(const char* msg, ...);
   void ErrorMsg(intptr_t token_index, const char* msg, ...);
@@ -210,6 +218,7 @@ class Parser : ValueObject {
                                const Class& cls,
                                AbstractType* type);
   enum TypeResolution {
+    kIgnore,  // Parsed type is ignored and replaced by Dynamic.
     kDoNotResolve,  // Type resolution is postponed.
     kCanResolve,  // Type resolution is optional.
     kMustResolve  // Type resolution is required.
@@ -310,14 +319,7 @@ class Parser : ValueObject {
   // Add the inlined finally block to the specified node.
   void AddFinallyBlockToNode(AstNode* node, InlinedFinallyNode* finally_node);
   AstNode* ParseTryStatement(String* label_name);
-
-  enum TypeSpecification {
-    kIsOptional,  // Type specification is optional.
-    kIsMandatory  // Type specification is mandatory.
-  };
-  RawAbstractType* ParseFinalVarOrType(TypeSpecification type_specification,
-                               TypeResolution type_resolution);
-  const AbstractType& ParseConstVarOrType(TypeSpecification type_specification);
+  RawAbstractType* ParseFinalVarOrType(TypeResolution type_resolution);
   AstNode* ParseVariableDeclaration(const AbstractType& type, bool is_const);
   AstNode* ParseVariableDeclarationList();
   AstNode* ParseFunctionStatement(bool is_literal);
