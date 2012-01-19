@@ -288,7 +288,7 @@ int main()
 
     // create an isolate
     char* err;
-    Dart_Isolate isolate = Dart_CreateIsolate(0, 0, &err);
+    Dart_Isolate isolate = Dart_CreateIsolate(0, 0, 0, &err);
     if (isolate == 0) {
         return 21;
     }

@@ -100,7 +100,7 @@ NumArray* toNumArray(const Dart_Handle& wrapper)
         return 0;
     }
 
-    // check if NumArrayPointer 
+    // check if NumArrayPointer
     bool is_instance = false;
     Dart_Handle result = Dart_ObjectIsType(wrapper, cls, &is_instance);
     if (!is_instance || !checkResult(result)) {
@@ -315,7 +315,7 @@ int main()
 
     // create an isolate
     char* err;
-    Dart_Isolate isolate = Dart_CreateIsolate(0, 0, &err);
+    Dart_Isolate isolate = Dart_CreateIsolate(0, 0, 0, &err);
     if (isolate == 0) {
         return 21;
     }
