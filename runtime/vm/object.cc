@@ -1480,46 +1480,19 @@ bool Class::TestType(TypeTestKind test,
 
 RawFunction* Class::LookupDynamicFunction(const String& name) const {
   Function& function = Function::Handle(LookupFunction(name));
-  if (function.IsNull() || function.is_static()) {
+  if (function.IsNull() || !function.IsDynamicFunction()) {
     return Function::null();
   }
-  switch (function.kind()) {
-    case RawFunction::kFunction:
-    case RawFunction::kGetterFunction:
-    case RawFunction::kSetterFunction:
-    case RawFunction::kImplicitGetter:
-    case RawFunction::kImplicitSetter:
-      return function.raw();
-    case RawFunction::kConstructor:
-    case RawFunction::kConstImplicitGetter:
-    case RawFunction::kAbstract:
-      return Function::null();
-    default:
-      UNREACHABLE();
-      return Function::null();
-  }
+  return function.raw();
 }
 
 
 RawFunction* Class::LookupStaticFunction(const String& name) const {
   Function& function = Function::Handle(LookupFunction(name));
-  if (function.IsNull() || !function.is_static()) {
+  if (function.IsNull() || !function.IsStaticFunction()) {
     return Function::null();
   }
-  switch (function.kind()) {
-    case RawFunction::kFunction:
-    case RawFunction::kGetterFunction:
-    case RawFunction::kSetterFunction:
-    case RawFunction::kImplicitGetter:
-    case RawFunction::kImplicitSetter:
-    case RawFunction::kConstImplicitGetter:
-      return function.raw();
-    case RawFunction::kConstructor:
-      return Function::null();
-    default:
-      UNREACHABLE();
-      return Function::null();
-  }
+  return function.raw();
 }
 
 
@@ -1567,15 +1540,35 @@ static bool MatchesPrivateName(const String& name, const String& private_name) {
 
 
 RawFunction* Class::LookupFunction(const String& name) const {
-  Array& funcs = Array::Handle(functions());
-  Function& function = Function::Handle();
-  String& function_name = String::Handle();
+  Isolate* isolate = Isolate::Current();
+  Array& funcs = Array::Handle(isolate, functions());
+  Function& function = Function::Handle(isolate, Function::null());
+  String& function_name = String::Handle(isolate, String::null());
   intptr_t len = funcs.Length();
   for (intptr_t i = 0; i < len; i++) {
     function ^= funcs.At(i);
     function_name ^= function.name();
     if (function_name.Equals(name) || MatchesPrivateName(function_name, name)) {
       return function.raw();
+    }
+  }
+
+  // No function found.
+  return Function::null();
+}
+
+
+RawFunction* Class::LookupFunctionAtToken(intptr_t token_index) const {
+  // TODO(hausner): we can shortcut the negative case if we knew the
+  // beginning and end token position of the class.
+  Array& funcs = Array::Handle(functions());
+  Function& func = Function::Handle();
+  intptr_t len = funcs.Length();
+  for (intptr_t i = 0; i < len; i++) {
+    func ^= funcs.At(i);
+    if ((func.token_index() <= token_index) &&
+        (token_index < func.end_token_index())) {
+      return func.raw();
     }
   }
 
@@ -1615,9 +1608,10 @@ RawField* Class::LookupStaticField(const String& name) const {
 
 
 RawField* Class::LookupField(const String& name) const {
-  const Array& flds = Array::Handle(fields());
-  Field& field = Field::Handle();
-  String& field_name = String::Handle();
+  Isolate* isolate = Isolate::Current();
+  const Array& flds = Array::Handle(isolate, fields());
+  Field& field = Field::Handle(isolate, Field::null());
+  String& field_name = String::Handle(isolate, String::null());
   intptr_t len = flds.Length();
   for (intptr_t i = 0; i < len; i++) {
     field ^= flds.At(i);
@@ -1632,9 +1626,11 @@ RawField* Class::LookupField(const String& name) const {
 
 
 RawLibraryPrefix* Class::LookupLibraryPrefix(const String& name) const {
-  LibraryPrefix& lib_prefix = LibraryPrefix::Handle();
-  const Library& lib = Library::Handle(library());
-  Object& obj = Object::Handle(lib.LookupLocalObject(name));
+  Isolate* isolate = Isolate::Current();
+  LibraryPrefix& lib_prefix = LibraryPrefix::Handle(isolate,
+                                                    LibraryPrefix::null());
+  const Library& lib = Library::Handle(isolate, library());
+  Object& obj = Object::Handle(isolate, lib.LookupLocalObject(name));
   if (!obj.IsNull()) {
     if (obj.IsLibraryPrefix()) {
       lib_prefix ^= obj.raw();
@@ -3237,6 +3233,7 @@ RawFunction* Function::New(const String& name,
   result.set_is_static(is_static);
   result.set_is_const(is_const);
   result.set_token_index(token_index);
+  result.set_end_token_index(token_index);
   result.set_num_fixed_parameters(0);
   result.set_num_optional_parameters(0);
   result.set_invocation_counter(0);
@@ -3674,14 +3671,11 @@ void Script::Tokenize(const String& private_key) const {
   }
 
   // Get the source, scan and allocate the token stream.
-  if (FLAG_compiler_stats) {
-    CompilerStats::scanner_timer.Start();
-  }
+  TimerScope timer(FLAG_compiler_stats, &CompilerStats::scanner_timer);
   const String& src = String::Handle(source());
   Scanner scanner(src, private_key);
   set_tokens(TokenStream::Handle(TokenStream::New(scanner.GetStream())));
   if (FLAG_compiler_stats) {
-    CompilerStats::scanner_timer.Stop();
     CompilerStats::src_length += src.Length();
   }
 }
@@ -3696,6 +3690,14 @@ void Script::GetTokenLocation(intptr_t token_index,
   scanner.ScanTo(token_index);
   *line = scanner.CurrentPosition().line;
   *column = scanner.CurrentPosition().column;
+}
+
+
+intptr_t Script::TokenIndexAtLine(intptr_t line_number) const {
+  const String& src = String::Handle(source());
+  const String& dummy_key = String::Handle(String::New(""));
+  Scanner scanner(src, dummy_key);
+  return scanner.TokenIndexAtLine(line_number);
 }
 
 
@@ -3978,17 +3980,106 @@ void Library::AddClass(const Class& cls) const {
 }
 
 
-RawObject* Library::LookupLocalObject(const String& name) const {
-  const Array& dict = Array::Handle(dictionary());
-  intptr_t dict_size = dict.Length() - 1;
-  intptr_t index = name.Hash() % dict_size;
-
+// TODO(hausner): we might want to add a script dictionary to the
+// library class to make this lookup less cumbersome.
+RawScript* Library::LookupScript(const String& url) const {
   Object& entry = Object::Handle();
   Class& cls = Class::Handle();
   Function& func = Function::Handle();
   Field& field = Field::Handle();
-  LibraryPrefix& library_prefix = LibraryPrefix::Handle();
-  String& entry_name = String::Handle();
+  Script& owner_script = Script::Handle();
+  String& owner_url = String::Handle();
+
+  DictionaryIterator it(*this);
+  while (it.HasNext()) {
+    entry = it.GetNext();
+    if (entry.IsClass()) {
+      cls ^= entry.raw();
+    } else if (entry.IsFunction()) {
+      func ^= entry.raw();
+      cls = func.owner();
+    } else if (entry.IsField()) {
+      field ^= entry.raw();
+      cls = field.owner();
+    } else {
+      continue;
+    }
+    owner_script = cls.script();
+    if (owner_script.IsNull()) {
+      continue;
+    }
+    owner_url = owner_script.url();
+    if (owner_url.Equals(url)) {
+      return owner_script.raw();
+    }
+  }
+  return Script::null();
+}
+
+
+RawFunction* Library::LookupFunctionInSource(const String& script_url,
+                                             intptr_t line_number) const {
+  Script& script = Script::Handle(LookupScript(script_url));
+  if (script.IsNull()) {
+    // The given script url is not loaded into this library.
+    return Function::null();
+  }
+
+  // Determine token position at given line number.
+  intptr_t token_index_at_line = script.TokenIndexAtLine(line_number);
+  if (token_index_at_line < 0) {
+    // Script does not contain the given line number.
+    return Function::null();
+  }
+
+  return LookupFunctionInScript(script, token_index_at_line);
+}
+
+
+RawFunction* Library::LookupFunctionInScript(const Script& script,
+                                             intptr_t token_index) const {
+  Object& entry = Object::Handle();
+  Class& cls = Class::Handle();
+  Function& func = Function::Handle();
+  DictionaryIterator it(*this);
+  while (it.HasNext()) {
+    entry = it.GetNext();
+    if (entry.IsFunction()) {
+      func ^= entry.raw();
+      cls = func.owner();
+      if (script.raw() == cls.script()) {
+        if ((func.token_index() <= token_index) &&
+            (token_index < func.end_token_index())) {
+          return func.raw();
+        }
+      }
+    } else if (entry.IsClass()) {
+      cls ^= entry.raw();
+      if (script.raw() == cls.script()) {
+        func = cls.LookupFunctionAtToken(token_index);
+        if (!func.IsNull()) {
+          return func.raw();
+        }
+      }
+    }
+  }
+  return Function::null();
+}
+
+
+RawObject* Library::LookupLocalObject(const String& name) const {
+  Isolate* isolate = Isolate::Current();
+  const Array& dict = Array::Handle(isolate, dictionary());
+  intptr_t dict_size = dict.Length() - 1;
+  intptr_t index = name.Hash() % dict_size;
+
+  Object& entry = Object::Handle(isolate, Object::null());
+  Class& cls = Class::Handle(isolate, Class::null());
+  Function& func = Function::Handle(isolate, Function::null());
+  Field& field = Field::Handle(isolate, Field::null());
+  LibraryPrefix& library_prefix = LibraryPrefix::Handle(isolate,
+                                                        LibraryPrefix::null());
+  String& entry_name = String::Handle(isolate, String::null());
   entry = dict.At(index);
   // Search the entry in the hash set.
   while (!entry.IsNull()) {
@@ -4051,9 +4142,11 @@ RawObject* Library::LookupObject(const String& name) const {
 
 
 RawLibrary* Library::LookupObjectInImporter(const String& name) const {
-  const Array& imported_into_libs = Array::Handle(this->imported_into());
-  Library& lib = Library::Handle();
-  Object& obj = Object::Handle();
+  Isolate* isolate = Isolate::Current();
+  const Array& imported_into_libs = Array::Handle(isolate,
+                                                  this->imported_into());
+  Library& lib = Library::Handle(isolate, Library::null());
+  Object& obj = Object::Handle(isolate, Object::null());
   for (intptr_t i = 0; i < this->num_imported_into(); i++) {
     lib ^= imported_into_libs.At(i);
     obj = lib.LookupObjectFiltered(name, *this);
@@ -4061,9 +4154,9 @@ RawLibrary* Library::LookupObjectInImporter(const String& name) const {
       // If the object found is a class, field or function extract the
       // library in which it is defined as it might be defined in one of
       // the imported libraries.
-      Class& cls = Class::Handle();
-      Function& func = Function::Handle();
-      Field& field = Field::Handle();
+      Class& cls = Class::Handle(isolate, Class::null());
+      Function& func = Function::Handle(isolate, Function::null());
+      Field& field = Field::Handle(isolate, Field::null());
       if (obj.IsClass()) {
         cls ^= obj.raw();
         lib ^= cls.library();
@@ -4175,10 +4268,11 @@ void Library::AddAnonymousClass(const Class& cls) const {
 
 
 RawLibrary* Library::LookupImport(const String& url) const {
-  const Array& imports = Array::Handle(this->imports());
+  Isolate* isolate = Isolate::Current();
+  const Array& imports = Array::Handle(isolate, this->imports());
   intptr_t num_imports = this->num_imports();
-  Library& lib = Library::Handle();
-  String& import_url = String::Handle();
+  Library& lib = Library::Handle(isolate, Library::null());
+  String& import_url = String::Handle(isolate, String::null());
   for (int i = 0; i < num_imports; i++) {
     lib ^= imports.At(i);
     import_url = lib.url();
@@ -4332,9 +4426,10 @@ void Library::InitNativeWrappersLibrary(Isolate* isolate) {
 
 
 RawLibrary* Library::LookupLibrary(const String &url) {
-  Library& lib = Library::Handle();
-  String& lib_url = String::Handle();
-  lib = Isolate::Current()->object_store()->registered_libraries();
+  Isolate* isolate = Isolate::Current();
+  Library& lib = Library::Handle(isolate, Library::null());
+  String& lib_url = String::Handle(isolate, String::null());
+  lib = isolate->object_store()->registered_libraries();
   while (!lib.IsNull()) {
     lib_url = lib.url();
     if (lib_url.Equals(url)) {
@@ -6556,12 +6651,12 @@ RawString* String::NewSymbol(const String& str,
   intptr_t hash = String::Hash(str, begin_index, len);
 
   const Array& symbol_table =
-      Array::Handle(isolate->object_store()->symbol_table());
+      Array::Handle(isolate, isolate->object_store()->symbol_table());
   // Last element of the array is the number of used elements.
   intptr_t table_size = symbol_table.Length() - 1;
   intptr_t index = hash % table_size;
 
-  String& symbol = String::Handle();
+  String& symbol = String::Handle(isolate, String::null());
   symbol ^= symbol_table.At(index);
   while (!symbol.IsNull() && !symbol.Equals(str, begin_index, len)) {
     index = (index + 1) % table_size;  // Move to next element.

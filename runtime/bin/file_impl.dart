@@ -1,4 +1,4 @@
-// Copyright (c) 2011, the Dart project authors.  Please see the AUTHORS file
+// Copyright (c) 2012, the Dart project authors.  Please see the AUTHORS file
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
@@ -420,7 +420,26 @@ class _FileUtils {
   static int readList(int id, List<int> buffer, int offset, int bytes)
       native "File_ReadList";
   static int writeByte(int id, int value) native "File_WriteByte";
-  static int writeList(int id, List<int> buffer, int offset, int bytes)
+  static int writeList(int id, List<int> buffer, int offset, int bytes) {
+    // When using the Dart C API access to ObjectArray by index is
+    // currently much faster. This function will make a copy of the
+    // supplied List to an ObjectArray if it isn't already.
+    ObjectArray outBuffer;
+    int outOffset = offset;
+    if (buffer is ObjectArray) {
+      outBuffer = buffer;
+    } else {
+      outBuffer = new ObjectArray(bytes);
+      outOffset = 0;
+      int j = offset;
+      for (int i = 0; i < bytes; i++) {
+        outBuffer[i] = buffer[j];
+        j++;
+      }
+    }
+    return writeListNative(id, outBuffer, outOffset, bytes);
+  }
+  static int writeListNative(int id, List<int> buffer, int offset, int bytes)
       native "File_WriteList";
   static int writeString(int id, String string) native "File_WriteString";
   static int position(int id) native "File_Position";
@@ -574,7 +593,7 @@ class _File implements File {
     _scheduler.enqueue(operation, handleOpenResult);
   }
 
-  void openSync([FileMode mode = FileMode.READ]) {
+  RandomAccessFile openSync([FileMode mode = FileMode.READ]) {
     if (_asyncUsed) {
       throw new FileIOException(
           "Mixed use of synchronous and asynchronous API");
