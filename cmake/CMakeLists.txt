@@ -84,11 +84,14 @@ t_makeLibrary()
 t_init(dart_builtin)
 t_findHeaders(bin .h)
 t_findSources(bin .cc)
-t_removeSources(ALL  main _test builtin_in builtin_nolib snapshot)
+t_removeSources(ALL  main _test io_in builtin_in builtin_nolib snapshot)
 t_removeForeignOsSources()
-t_findDartFiles(bin)
-t_prependDartFiles(bin/builtin.dart) # load first
+t_addDartFiles(bin/builtin.dart)
 t_embedDartFiles(bin/builtin_in.cc ${gen_dir}/builtin.cc)
+t_findDartFiles(bin)
+t_removeDartFiles(bin/builtin.dart)
+t_prependDartFiles(bin/io.dart) # load first
+t_embedDartFiles(bin/io_in.cc ${gen_dir}/io.cc)
 t_includeDirectories(.)
 t_makeLibrary()
 
