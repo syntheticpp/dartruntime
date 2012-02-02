@@ -140,6 +140,30 @@ DART_EXPORT Dart_Handle Dart_ErrorGetStacktrace(Dart_Handle handle);
  */
 DART_EXPORT Dart_Handle Dart_Error(const char* format, ...);
 
+/**
+ * Propagates an error.
+ *
+ * It only makes sense to call this function when there are dart
+ * frames on the stack.  That is, this function should only be called
+ * in the C implementation of a native function which has been called
+ * from Dart code.  If this function is called in the top-level
+ * embedder code, it will return an error, as there is no way to
+ * further propagate the error.
+ *
+ * The provided handle must be an error handle.  (See Dart_IsError.)
+ *
+ * If the provided handle is an unhandled exception, this function
+ * will cause the unhandled exception to be rethrown.  Otherwise, the
+ * error will be propagated to the caller, discarding any active dart
+ * frames up to the next C frame.
+ *
+ * \param An error handle.
+ *
+ * \return On success, this function does not return.  On failure, an
+ *   error handle is returned.
+ */
+DART_EXPORT Dart_Handle Dart_PropagateError(Dart_Handle handle);
+
 // Internal routine used for reporting error handles.
 DART_EXPORT void _Dart_ReportErrorHandle(const char* file,
                                          int line,
@@ -1406,7 +1430,7 @@ DART_EXPORT Dart_Handle Dart_SetNativeResolver(
 DART_EXPORT void Dart_InitPprofSupport();
 DART_EXPORT void Dart_GetPprofSymbolInfo(void** buffer, int* buffer_size);
 
-// --- Message encoding/decoding ----
+// --- Message sending/receiving from native code ----
 
 /**
  * A Dart_CObject is used for representing Dart objects as native C
@@ -1416,12 +1440,13 @@ DART_EXPORT void Dart_GetPprofSymbolInfo(void** buffer, int* buffer_size);
  */
 struct Dart_CObject {
   enum Type {
-    kNull,
+    kNull = 0,
     kBool,
     kInt32,
     kDouble,
     kString,
-    kArray
+    kArray,
+    kNumberOfTypes
   };
   Type type;
   union {
@@ -1437,10 +1462,17 @@ struct Dart_CObject {
 };
 
 /**
- * A Dart_CMessage is used for encoding and decoding messages from native code.
+ * A Dart_CMessage is used for receiving and sending messages from
+ * native code not running in an isolate. A message contains an object
+ * graph represented as Dart_CObject structures rooted as the provided
+ * root.
+ *
+ * For information on the lifetime of this data, when provided in
+ * callbacks, see the documentation for the individual callbacks.
  */
 struct Dart_CMessage {
-  Dart_CObject** message;
+  Dart_CObject* root;
 };
+
 
 #endif  // INCLUDE_DART_API_H_
