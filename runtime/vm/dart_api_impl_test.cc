@@ -361,7 +361,7 @@ TEST_CASE(IntegerValues) {
 
 
 TEST_CASE(IntegerFitsIntoInt64) {
-  Dart_Handle max = Dart_NewInteger(DART_INT64_C(0x7FFFFFFFFFFFFFFF));
+  Dart_Handle max = Dart_NewInteger(kMaxInt64);
   EXPECT(Dart_IsInteger(max));
   bool fits = false;
   Dart_Handle result = Dart_IntegerFitsIntoInt64(max, &fits);
@@ -375,7 +375,7 @@ TEST_CASE(IntegerFitsIntoInt64) {
   EXPECT_VALID(result);
   EXPECT(!fits);
 
-  Dart_Handle min = Dart_NewInteger(DART_INT64_C(-0x8000000000000000));
+  Dart_Handle min = Dart_NewInteger(kMaxInt64);
   EXPECT(Dart_IsInteger(min));
   fits = false;
   result = Dart_IntegerFitsIntoInt64(min, &fits);
@@ -1495,7 +1495,10 @@ TEST_CASE(InjectNativeFields4) {
   // We expect the test script to fail finalization with the error below:
   EXPECT(Dart_IsError(result));
   Dart_Handle expected_error = Dart_Error(
-      "'dart:test-lib': Error: line 1 pos 38: class 'NativeFields' is trying");
+      "'dart:test-lib': Error: line 1 pos 38: "
+      "class 'NativeFields' is trying to extend a native fields class, "
+      "but library '%s' has no native resolvers",
+      TestCase::url());
   EXPECT_SUBSTRING(Dart_GetError(expected_error), Dart_GetError(result));
 }
 
@@ -2887,23 +2890,31 @@ TEST_CASE(ImportLibrary5) {
 
 void NewNativePort_send123(Dart_Port dest_port_id,
                            Dart_Port reply_port_id,
-                           uint8_t* data) {
+                           Dart_CObject *message) {
+  // Gets a null message.
+  EXPECT_NOTNULL(message);
+  EXPECT_EQ(Dart_CObject::kNull, message->type);
+
   // Post integer value.
-  Dart_CObject object;
-  object.type = Dart_CObject::kInt32;
-  object.value.as_int32 = 123;
-  Dart_PostCObject(reply_port_id, &object);
+  Dart_CObject response;
+  response.type = Dart_CObject::kInt32;
+  response.value.as_int32 = 123;
+  Dart_PostCObject(reply_port_id, &response);
 }
 
 
 void NewNativePort_send321(Dart_Port dest_port_id,
                            Dart_Port reply_port_id,
-                           uint8_t* data) {
+                           Dart_CObject* message) {
+  // Gets a null message.
+  EXPECT_NOTNULL(message);
+  EXPECT_EQ(Dart_CObject::kNull, message->type);
+
   // Post integer value.
-  Dart_CObject object;
-  object.type = Dart_CObject::kInt32;
-  object.value.as_int32 = 321;
-  Dart_PostCObject(reply_port_id, &object);
+  Dart_CObject response;
+  response.type = Dart_CObject::kInt32;
+  response.value.as_int32 = 321;
+  Dart_PostCObject(reply_port_id, &response);
 }
 
 
