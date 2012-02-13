@@ -83,7 +83,7 @@ namespace BindNumberArray
     void getAt(Dart_NativeArguments args);
     void getSize(Dart_NativeArguments args);
     void newArray(Dart_NativeArguments args);
-    void deleteArray(void* peer);
+    void deleteArray(Dart_Handle handle, void* peer);
 
     uint64_t toIndex(const Dart_Handle& handle, bool& ok);
     NumberArray* toNumberArray(const Dart_Handle& wrapper);
@@ -269,7 +269,7 @@ void BindNumberArray::getSize(Dart_NativeArguments args)
 
 
 //------------------------------------------------------------------
-void BindNumberArray::deleteArray(void* peer)
+void BindNumberArray::deleteArray(Dart_Handle handle, void *peer)
 {
     NumberArray* obj = reinterpret_cast<NumberArray*>(peer);
     delete obj;
