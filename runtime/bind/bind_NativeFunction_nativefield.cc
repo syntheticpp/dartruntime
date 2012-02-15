@@ -244,7 +244,8 @@ void deleteArray(Dart_NativeArguments args)
 //------------------------------------------------------------------
 static Dart_Handle library_handler(Dart_LibraryTag tag,
                                    Dart_Handle library,
-                                   Dart_Handle url)
+                                   Dart_Handle url,
+                                   Dart_Handle import_map)
 {
   if (tag == kCanonicalizeUrl) {
     return url;
@@ -325,7 +326,8 @@ int main()
     // Load
     Dart_Handle url = Dart_NewString("dart:bind");
     Dart_Handle source = Dart_NewString(script);
-    Dart_Handle lib = Dart_LoadScript(url, source, library_handler);
+    Dart_Handle import_map = Dart_NewList(0);
+    Dart_Handle lib = Dart_LoadScript(url, source, library_handler, import_map);
     if (!checkResult(lib)) {
         return 30;
     }
