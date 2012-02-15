@@ -1721,6 +1721,178 @@ DART_EXPORT Dart_Handle Dart_ExternalByteArrayGetPeer(Dart_Handle object,
 }
 
 
+template<typename T>
+Dart_Handle ByteArrayGetAt(T* value, Dart_Handle array, intptr_t offset) {
+  const ByteArray& array_obj = Api::UnwrapByteArrayHandle(array);
+  if (array_obj.IsNull()) {
+    RETURN_TYPE_ERROR(array, ByteArray);
+  }
+  intptr_t length = sizeof(T);
+  if (!Utils::RangeCheck(offset, length, array_obj.Length())) {
+    return Api::NewError("Invalid index passed in to get byte array element");
+  }
+  uint8_t* dst = reinterpret_cast<uint8_t*>(value);
+  ByteArray::Copy(dst, array_obj, offset, length);
+  return Api::Success();
+}
+
+
+template<typename T>
+Dart_Handle ByteArraySetAt(Dart_Handle array, intptr_t offset, T value) {
+  const ByteArray& array_obj = Api::UnwrapByteArrayHandle(array);
+  if (array_obj.IsNull()) {
+    RETURN_TYPE_ERROR(array, ByteArray);
+  }
+  intptr_t length = sizeof(T);
+  if (!Utils::RangeCheck(offset, length, array_obj.Length())) {
+    return Api::NewError("Invalid index passed in to get byte array element");
+  }
+  const uint8_t* src = reinterpret_cast<uint8_t*>(&value);
+  ByteArray::Copy(array_obj, offset, src, length);
+  return Api::Success();
+}
+
+
+DART_EXPORT Dart_Handle Dart_ByteArrayGetInt8At(Dart_Handle array,
+                                                intptr_t offset,
+                                                int8_t* value) {
+  return ByteArrayGetAt(value, array, offset);
+}
+
+
+DART_EXPORT Dart_Handle Dart_ByteArraySetInt8At(Dart_Handle array,
+                                                intptr_t offset,
+                                                int8_t value) {
+  return ByteArraySetAt(array, offset, value);
+}
+
+
+DART_EXPORT Dart_Handle Dart_ByteArrayGetUint8At(Dart_Handle array,
+                                                 intptr_t offset,
+                                                 uint8_t* value) {
+  return ByteArrayGetAt(value, array, offset);
+}
+
+
+DART_EXPORT Dart_Handle Dart_ByteArraySetUint8At(Dart_Handle array,
+                                                 intptr_t offset,
+                                                 uint8_t value) {
+  return ByteArraySetAt(array, offset, value);
+}
+
+
+DART_EXPORT Dart_Handle Dart_ByteArrayGetInt16At(Dart_Handle array,
+                                                 intptr_t offset,
+                                                 int16_t* value) {
+  return ByteArrayGetAt(value, array, offset);
+}
+
+
+DART_EXPORT Dart_Handle Dart_ByteArraySetInt16At(Dart_Handle array,
+                                                 intptr_t offset,
+                                                 int16_t value) {
+  return ByteArraySetAt(array, offset, value);
+}
+
+
+DART_EXPORT Dart_Handle Dart_ByteArrayGetUint16At(Dart_Handle array,
+                                                  intptr_t offset,
+                                                  uint16_t* value) {
+  return ByteArrayGetAt(value, array, offset);
+}
+
+
+DART_EXPORT Dart_Handle Dart_ByteArraySetUint16At(Dart_Handle array,
+                                                  intptr_t offset,
+                                                  uint16_t value) {
+  return ByteArraySetAt(array, offset, value);
+}
+
+
+DART_EXPORT Dart_Handle Dart_ByteArrayGetInt32At(Dart_Handle array,
+                                                 intptr_t offset,
+                                                 int32_t* value) {
+  return ByteArrayGetAt(value, array, offset);
+}
+
+
+DART_EXPORT Dart_Handle Dart_ByteArraySetInt32At(Dart_Handle array,
+                                                 intptr_t offset,
+                                                 int32_t value) {
+  return ByteArraySetAt(array, offset, value);
+}
+
+
+DART_EXPORT Dart_Handle Dart_ByteArrayGetUint32At(Dart_Handle array,
+                                                  intptr_t offset,
+                                                  uint32_t* value) {
+  return ByteArrayGetAt(value, array, offset);
+}
+
+
+DART_EXPORT Dart_Handle Dart_ByteArraySetUint32At(Dart_Handle array,
+                                                  intptr_t offset,
+                                                  uint32_t value) {
+  return ByteArraySetAt(array, offset, value);
+}
+
+
+DART_EXPORT Dart_Handle Dart_ByteArrayGetInt64At(Dart_Handle array,
+                                                 intptr_t offset,
+                                                 int64_t* value) {
+  return ByteArrayGetAt(value, array, offset);
+}
+
+
+DART_EXPORT Dart_Handle Dart_ByteArraySetInt64At(Dart_Handle array,
+                                                 intptr_t offset,
+                                                 int64_t value) {
+  return ByteArraySetAt(array, offset, value);
+}
+
+
+DART_EXPORT Dart_Handle Dart_ByteArrayGetUint64At(Dart_Handle array,
+                                                  intptr_t offset,
+                                                  uint64_t* value) {
+  return ByteArrayGetAt(value, array, offset);
+}
+
+
+DART_EXPORT Dart_Handle Dart_ByteArraySetUint64At(Dart_Handle array,
+                                                  intptr_t offset,
+                                                  uint64_t value) {
+  return ByteArraySetAt(array, offset, value);
+}
+
+
+DART_EXPORT Dart_Handle Dart_ByteArrayGetFloat32At(Dart_Handle array,
+                                                   intptr_t offset,
+                                                   float* value) {
+  return ByteArrayGetAt(value, array, offset);
+}
+
+
+DART_EXPORT Dart_Handle Dart_ByteArraySetFloat32At(Dart_Handle array,
+                                                   intptr_t offset,
+                                                   float value) {
+  return ByteArraySetAt(array, offset, value);
+}
+
+
+DART_EXPORT Dart_Handle Dart_ByteArrayGetFloat64At(Dart_Handle array,
+                                                   intptr_t offset,
+                                                   double* value) {
+  return ByteArrayGetAt(value, array, offset);
+}
+
+
+DART_EXPORT Dart_Handle Dart_ByteArraySetFloat64At(Dart_Handle array,
+                                                   intptr_t offset,
+                                                   double value) {
+  return ByteArraySetAt(array, offset, value);
+}
+
+
 // --- Closures ---
 
 
@@ -2248,7 +2420,8 @@ static void CompileSource(Isolate* isolate,
 
 DART_EXPORT Dart_Handle Dart_LoadScript(Dart_Handle url,
                                         Dart_Handle source,
-                                        Dart_LibraryTagHandler handler) {
+                                        Dart_LibraryTagHandler handler,
+                                        Dart_Handle import_map) {
   TIMERSCOPE(time_script_loading);
   Isolate* isolate = Isolate::Current();
   DARTSCOPE(isolate);
@@ -2260,6 +2433,10 @@ DART_EXPORT Dart_Handle Dart_LoadScript(Dart_Handle url,
   if (source_str.IsNull()) {
     RETURN_TYPE_ERROR(source, String);
   }
+  const Array& mapping_array = Api::UnwrapArrayHandle(import_map);
+  if (mapping_array.IsNull()) {
+    RETURN_TYPE_ERROR(import_map, Array);
+  }
   Library& library = Library::Handle(isolate->object_store()->root_library());
   if (!library.IsNull()) {
     const String& library_url = String::Handle(library.url());
@@ -2268,6 +2445,7 @@ DART_EXPORT Dart_Handle Dart_LoadScript(Dart_Handle url,
   }
   isolate->set_library_tag_handler(handler);
   library = Library::New(url_str);
+  library.set_import_map(mapping_array);
   library.Register();
   isolate->object_store()->set_root_library(library);
   Dart_Handle result;
@@ -2393,7 +2571,9 @@ DART_EXPORT Dart_Handle Dart_LookupLibrary(Dart_Handle url) {
 }
 
 
-DART_EXPORT Dart_Handle Dart_LoadLibrary(Dart_Handle url, Dart_Handle source) {
+DART_EXPORT Dart_Handle Dart_LoadLibrary(Dart_Handle url,
+                                         Dart_Handle source,
+                                         Dart_Handle import_map) {
   TIMERSCOPE(time_script_loading);
   Isolate* isolate = Isolate::Current();
   DARTSCOPE(isolate);
@@ -2405,9 +2585,14 @@ DART_EXPORT Dart_Handle Dart_LoadLibrary(Dart_Handle url, Dart_Handle source) {
   if (source_str.IsNull()) {
     RETURN_TYPE_ERROR(source, String);
   }
+  const Array& mapping_array = Api::UnwrapArrayHandle(import_map);
+  if (mapping_array.IsNull()) {
+    RETURN_TYPE_ERROR(import_map, Array);
+  }
   Library& library = Library::Handle(Library::LookupLibrary(url_str));
   if (library.IsNull()) {
     library = Library::New(url_str);
+    library.set_import_map(mapping_array);
     library.Register();
   } else if (!library.LoadNotStarted()) {
     // The source for this library has either been loaded or is in the

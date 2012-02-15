@@ -1959,7 +1959,7 @@ void Parser::ParseMethodOrConstructor(ClassDesc* members, MemberDesc* method) {
     ErrorMsg(method->name_pos, "constructor cannot be 'static'");
   }
   if (method->IsConstructor() && method->has_const) {
-    Class& cls = Class::ZoneHandle(LookupClass(members->class_name()));
+    Class& cls = Class::ZoneHandle(library_.LookupClass(members->class_name()));
     cls.set_is_const();
   }
   if (method->has_abstract && members->is_interface()) {
@@ -2328,8 +2328,14 @@ void Parser::ParseClassMemberDefinition(ClassDesc* members) {
       member.name_pos = factory_name.ident_pos;
       member.name = factory_name.ident;  // Unqualified identifier.
       // The class of the factory result type is specified by the factory name.
+      LibraryPrefix& lib_prefix = LibraryPrefix::Handle();
+      if (factory_name.lib_prefix != NULL) {
+        lib_prefix = factory_name.lib_prefix->raw();
+      }
       const Object& result_type_class = Object::Handle(
-          LookupTypeClass(factory_name, kCanResolve));
+          UnresolvedClass::New(lib_prefix,
+                               *factory_name.ident,
+                               factory_name.ident_pos));
       // The type arguments of the result type are set during finalization.
       member.type = &Type::ZoneHandle(Type::New(result_type_class,
                                                 TypeArguments::Handle(),
@@ -2690,7 +2696,8 @@ void Parser::ParseFunctionTypeAlias(GrowableArray<const Class*>* classes) {
   }
   ASSERT(signature_function.signature_class() == signature_class.raw());
   // Lookup the class by its alias name and report an error if it exists.
-  Class& function_type_alias = Class::ZoneHandle(LookupClass(*alias_name));
+  Class& function_type_alias =
+      Class::ZoneHandle(library_.LookupClass(*alias_name));
   if (function_type_alias.IsNull()) {
     // Create the function type alias, but share the signature function of the
     // canonical signature class.
@@ -3220,14 +3227,16 @@ void Parser::ParseLibraryName() {
 
 Dart_Handle Parser::CallLibraryTagHandler(Dart_LibraryTag tag,
                                           intptr_t token_pos,
-                                          const String& url) {
+                                          const String& url,
+                                          const Array& import_map) {
   Dart_LibraryTagHandler handler = Isolate::Current()->library_tag_handler();
   if (handler == NULL) {
     ErrorMsg(token_pos, "no library handler registered");
   }
   Dart_Handle result = handler(tag,
                                Api::NewLocalHandle(library_),
-                               Api::NewLocalHandle(url));
+                               Api::NewLocalHandle(url),
+                               Api::NewLocalHandle(import_map));
   if (Dart_IsError(result)) {
     ErrorMsg(token_pos, "library handler failed: %s", Dart_GetError(result));
   }
@@ -3243,8 +3252,7 @@ void Parser::ParseLibraryImport() {
     if (CurrentToken() != Token::kSTRING) {
       ErrorMsg("library url expected");
     }
-    const String& url = *CurrentLiteral();
-    ConsumeToken();
+    const String& url = *ParseImportStringLiteral();
     String& prefix = String::Handle();
     if (CurrentToken() == Token::kCOMMA) {
       ConsumeToken();
@@ -3265,15 +3273,17 @@ void Parser::ParseLibraryImport() {
     }
     ExpectToken(Token::kRPAREN);
     ExpectToken(Token::kSEMICOLON);
+    const Array& import_map = Array::Handle(library_.import_map());
     Dart_Handle handle = CallLibraryTagHandler(kCanonicalizeUrl,
                                                import_pos,
-                                               url);
+                                               url,
+                                               import_map);
     const String& canon_url = String::CheckedHandle(Api::UnwrapHandle(handle));
     // Lookup the library URL.
     Library& library = Library::Handle(Library::LookupLibrary(canon_url));
     if (library.IsNull()) {
       // Call the library tag handler to load the library.
-      CallLibraryTagHandler(kImportTag, import_pos, canon_url);
+      CallLibraryTagHandler(kImportTag, import_pos, canon_url, import_map);
       // If the library tag handler succeded without registering the
       // library we create an empty library to import.
       library = Library::LookupLibrary(canon_url);
@@ -3298,6 +3308,7 @@ void Parser::ParseLibraryImport() {
 
 
 void Parser::ParseLibraryInclude() {
+  const Array& import_map = Array::Handle(library_.import_map());
   while (CurrentToken() == Token::kSOURCE) {
     const intptr_t source_pos = token_index_;
     ConsumeToken();
@@ -3305,15 +3316,15 @@ void Parser::ParseLibraryInclude() {
     if (CurrentToken() != Token::kSTRING) {
       ErrorMsg("source url expected");
     }
-    const String& url = *CurrentLiteral();
-    ConsumeToken();
+    const String& url = *ParseImportStringLiteral();
     ExpectToken(Token::kRPAREN);
     ExpectToken(Token::kSEMICOLON);
     Dart_Handle handle = CallLibraryTagHandler(kCanonicalizeUrl,
                                                source_pos,
-                                               url);
+                                               url,
+                                               import_map);
     const String& canon_url = String::CheckedHandle(Api::UnwrapHandle(handle));
-    CallLibraryTagHandler(kSourceTag, source_pos, canon_url);
+    CallLibraryTagHandler(kSourceTag, source_pos, canon_url, import_map);
   }
 }
 
@@ -4526,11 +4537,6 @@ static RawClass* LookupCoreClass(const String& class_name) {
     name = String::NewSymbol(name);
   }
   return core_lib.LookupClass(name);
-}
-
-
-RawClass* Parser::LookupClass(const String& class_name) {
-  return library_.LookupClass(class_name);
 }
 
 
@@ -6149,19 +6155,18 @@ void Parser::ResolveTypeFromClass(const Class& scope_class,
                                   AbstractType* type) {
   ASSERT((type_resolution == kCanResolve) || (type_resolution == kMustResolve));
   ASSERT(type != NULL);
+  if (type->IsResolved()) {
+    return;
+  }
   // Resolve class.
   if (!type->HasResolvedTypeClass()) {
     const UnresolvedClass& unresolved_class =
         UnresolvedClass::Handle(type->unresolved_class());
     const String& unresolved_class_name =
         String::Handle(unresolved_class.ident());
-    // First resolve library prefix if any.
     Library& lib = Library::Handle();
     if (unresolved_class.library_prefix() == LibraryPrefix::null()) {
-      if (scope_class.IsNull()) {
-        lib = library_.raw();
-      } else {
-        lib = scope_class.library();
+      if (!scope_class.IsNull()) {
         // First check if the type is a type parameter of the given scope class.
         const TypeParameter& type_parameter = TypeParameter::Handle(
             scope_class.LookupTypeParameter(unresolved_class_name,
@@ -6183,20 +6188,24 @@ void Parser::ResolveTypeFromClass(const Class& scope_class,
           LibraryPrefix::Handle(unresolved_class.library_prefix());
       lib = lib_prefix.library();
     }
-    if (!lib.IsNull()) {
-      const Class& resolved_type_class = Class::Handle(
-          lib.LookupLocalClass(unresolved_class_name));
-      if (!resolved_type_class.IsNull()) {
-        Object& type_class = Object::Handle(resolved_type_class.raw());
-        ASSERT(type->IsType());
-        // Replace unresolved class with resolved type class.
-        Type& parameterized_type = Type::Handle();
-        parameterized_type ^= type->raw();
-        parameterized_type.set_type_class(type_class);
-      } else if (type_resolution == kMustResolve) {
-        ErrorMsg(type->token_index(), "type '%s' is not loaded",
-                 String::Handle(type->Name()).ToCString());
-      }
+    Class& resolved_type_class = Class::Handle();
+    if (lib.IsNull()) {
+      // Global lookup in current library.
+      resolved_type_class = library_.LookupClass(unresolved_class_name);
+    } else {
+      // Local lookup in imported library.
+      resolved_type_class = lib.LookupLocalClass(unresolved_class_name);
+    }
+    if (!resolved_type_class.IsNull()) {
+      Object& type_class = Object::Handle(resolved_type_class.raw());
+      ASSERT(type->IsType());
+      // Replace unresolved class with resolved type class.
+      Type& parameterized_type = Type::Handle();
+      parameterized_type ^= type->raw();
+      parameterized_type.set_type_class(type_class);
+    } else if (type_resolution == kMustResolve) {
+      ErrorMsg(type->token_index(), "type '%s' is not loaded",
+               String::Handle(type->Name()).ToCString());
     }
   }
   // Resolve type arguments, if any.
@@ -6212,39 +6221,6 @@ void Parser::ResolveTypeFromClass(const Class& scope_class,
       arguments.SetTypeAt(i, type_argument);
     }
   }
-}
-
-
-// Return class for type name. If the name cannot be resolved (yet), give an
-// error (if type_resolution == kMustResolve) or return the unresolved name.
-RawObject* Parser::LookupTypeClass(const QualIdent& type_name,
-                                   TypeResolution type_resolution) {
-  ASSERT(type_name.ident != NULL);
-  ASSERT((type_resolution == kCanResolve) || (type_resolution == kMustResolve));
-  Class& type_class = Class::Handle();
-  if (type_name.lib_prefix != NULL) {
-    Library& lib = Library::Handle(type_name.lib_prefix->library());
-    type_class = lib.LookupLocalClass(*type_name.ident);
-  } else {
-    type_class = LookupClass(*type_name.ident);
-  }
-  if (!type_class.IsNull()) {
-    return type_class.raw();
-  }
-  // Type name could not be resolved (yet).
-  if (type_resolution == kMustResolve) {
-    ErrorMsg(type_name.ident_pos, "type '%s' is not loaded",
-             type_name.ident->ToCString());
-    return Object::null_class();
-  }
-  // We have an unresolved name, create an UnresolvedClass object for this case.
-  LibraryPrefix& lib_prefix = LibraryPrefix::Handle();
-  if (type_name.lib_prefix != NULL) {
-    lib_prefix = type_name.lib_prefix->raw();
-  }
-  return UnresolvedClass::New(lib_prefix,
-                              *type_name.ident,
-                              type_name.ident_pos);
 }
 
 
@@ -6642,10 +6618,24 @@ AstNode* Parser::ResolveVarOrField(intptr_t ident_pos, const String& ident) {
 }
 
 
-// Parses type = [ident "."] ident ["<" type { "," type } ">"].
-// Returns the class object if the type can be resolved. Otherwise, either give
-// an error if type resolution was required, or return the unresolved name as a
-// string object.
+// Resolve variables used in an import string literal.
+// If the variable name cannot be resolved issue an error message.
+// Currently we only resolve against the global map which is passed in
+// when the script is loaded.
+RawString* Parser::ResolveImportVar(intptr_t ident_pos, const String& ident) {
+  TRACE_PARSER("ResolveImportVar");
+  String& map_name = String::Handle(library_.LookupImportMap(ident));
+  if (!map_name.IsNull()) {
+    return map_name.raw();
+  }
+  ErrorMsg(ident_pos, "import variable '%s' has not been defined",
+           ident.ToCString());
+  return String::null();
+}
+
+
+// Parses type = [ident "."] ident ["<" type { "," type } ">"] and resolve it
+// according to the given type_resolution.
 RawAbstractType* Parser::ParseType(TypeResolution type_resolution) {
   if (CurrentToken() != Token::kIDENT) {
     ErrorMsg("type name expected");
@@ -6663,11 +6653,9 @@ RawAbstractType* Parser::ParseType(TypeResolution type_resolution) {
                type_name.ident->ToCString());
     }
   }
-  Class& scope_class = Class::Handle();
   Object& type_class = Object::Handle();
-  if (type_resolution == kIgnore) {
-    // Leave type_class as null.
-  } else if (type_resolution == kDoNotResolve) {
+  // Leave type_class as null if type_resolution equals kIgnore.
+  if (type_resolution != kIgnore) {
     LibraryPrefix& lib_prefix = LibraryPrefix::Handle();
     if (type_name.lib_prefix != NULL) {
       lib_prefix = type_name.lib_prefix->raw();
@@ -6675,45 +6663,20 @@ RawAbstractType* Parser::ParseType(TypeResolution type_resolution) {
     type_class = UnresolvedClass::New(lib_prefix,
                                       *type_name.ident,
                                       type_name.ident_pos);
-  } else {
-    // TODO(regis): Use ResolveTypeFromClass().
-    ASSERT((type_resolution == kCanResolve) ||
-           (type_resolution == kMustResolve));
-    scope_class = TypeParametersScopeClass();
-    if (!scope_class.IsNull()) {
-      if (type_name.lib_prefix == NULL) {
-        // Check if ident is a type parameter in scope.
-        TypeParameter& type_parameter = TypeParameter::Handle(
-            scope_class.LookupTypeParameter(*type_name.ident,
-                                            type_name.ident_pos));
-        if (!type_parameter.IsNull()) {
-          if (CurrentToken() == Token::kLT) {
-            // A type parameter cannot be parameterized.
-            ErrorMsg(type_parameter.token_index(),
-                     "type parameter '%s' cannot be parameterized",
-                     String::Handle(type_parameter.Name()).ToCString());
-          }
-          if (type_resolution == kMustResolve) {
-            type_parameter ^=
-                ClassFinalizer::FinalizeType(current_class(), type_parameter);
-          }
-          return type_parameter.raw();
-        }
-      }
-    }
-    // Try to resolve the type class.
-    type_class = LookupTypeClass(type_name, type_resolution);
   }
   AbstractTypeArguments& type_arguments =
       AbstractTypeArguments::Handle(ParseTypeArguments(type_resolution));
   if (type_resolution == kIgnore) {
     return Type::DynamicType();
   }
-  Type& type = Type::Handle(
+  AbstractType& type = AbstractType::Handle(
       Type::New(type_class, type_arguments, type_name.ident_pos));
-  if (type_resolution == kMustResolve) {
-    ASSERT(type_class.IsClass());  // Must be resolved.
-    type ^= ClassFinalizer::FinalizeType(current_class(), type);
+  if ((type_resolution == kCanResolve) || (type_resolution == kMustResolve)) {
+    const Class& scope_class = Class::Handle(TypeParametersScopeClass());
+    ResolveTypeFromClass(scope_class, type_resolution, &type);
+    if (type_resolution == kMustResolve) {
+      type ^= ClassFinalizer::FinalizeType(current_class(), type);
+    }
   }
   return type.raw();
 }
@@ -7319,7 +7282,6 @@ AstNode* Parser::ParseStringLiteral() {
   }
   // String interpolation needed.
   ArrayNode* values = new ArrayNode(token_index_, TypeArguments::ZoneHandle());
-  GrowableArray<const Object*> arg_values;
   while (CurrentToken() == Token::kSTRING) {
     values->AddElement(new LiteralNode(token_index_, *CurrentLiteral()));
     ConsumeToken();
@@ -7352,6 +7314,61 @@ AstNode* Parser::ParseStringLiteral() {
                            kInterpolateName,
                            interpolate_arg);
   return primary;
+}
+
+
+// An import string literal consists of the concatenation of the next n tokens
+// that satisfy the EBNF grammar:
+// literal = kSTRING {{ interpol }+ kSTRING }
+// interpol = kINTERPOL_VAR
+// In other words, the scanner breaks down interpolated strings so that
+// a string literal always begins and ends with a kSTRING token, and
+// there are never two kSTRING tokens next to each other.
+String* Parser::ParseImportStringLiteral() {
+  if ((CurrentToken() == Token::kSTRING) &&
+      (LookaheadToken(1) != Token::kINTERPOL_VAR) &&
+      (LookaheadToken(1) != Token::kINTERPOL_START)) {
+    // Common case: no interpolation.
+    String* result = CurrentLiteral();
+    ConsumeToken();
+    return result;
+  }
+  // String interpolation needed.
+  String& result = String::ZoneHandle(String::New(""));
+  String& resolved_name = String::Handle();
+  while (CurrentToken() == Token::kSTRING) {
+    result = String::Concat(result, *CurrentLiteral());
+    ConsumeToken();
+    if ((CurrentToken() != Token::kINTERPOL_VAR) &&
+        (CurrentToken() != Token::kINTERPOL_START)) {
+      break;
+    }
+    while ((CurrentToken() == Token::kINTERPOL_VAR) ||
+           (CurrentToken() == Token::kINTERPOL_START)) {
+      if (CurrentToken() == Token::kINTERPOL_START) {
+        ConsumeToken();
+        if (IsIdentifier()) {
+          resolved_name = ResolveImportVar(token_index_, *CurrentLiteral());
+          result = String::Concat(result, resolved_name);
+          ConsumeToken();
+          if (CurrentToken() != Token::kINTERPOL_END) {
+            ErrorMsg("'}' expected");
+          }
+          ConsumeToken();
+        } else {
+          ErrorMsg("identifier expected");
+        }
+      } else {
+        ASSERT(CurrentToken() == Token::kINTERPOL_VAR);
+        resolved_name = ResolveImportVar(token_index_, *CurrentLiteral());
+        result = String::Concat(result, resolved_name);
+        ConsumeToken();
+      }
+    }
+    // A string literal always ends with a kSTRING token.
+    ASSERT(CurrentToken() == Token::kSTRING);
+  }
+  return &result;
 }
 
 
