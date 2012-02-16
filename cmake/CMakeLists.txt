@@ -204,6 +204,8 @@ t_makeExecutable()
 #
 
 if(tests)
+    enable_testing()
+
     t_init(run_vm_tests)
     t_findSources(vm _test.cc)
     t_findSources(bin _test.cc)
@@ -215,7 +217,7 @@ if(tests)
     t_includeDirectories(.)
     t_addDefinitions(TESTING)
     t_linkLibraries(dart_corelib)
-    t_makeExecutable()
+    t_makeTest()
 
 
     message(STATUS)
@@ -226,6 +228,8 @@ endif()
 
 
 if(bind)
+    enable_testing()
+
     macro(p_addExecutables _dir)
         foreach(_it ${ARGN})
             t_init(${_dir}_${_it})
@@ -233,7 +237,7 @@ if(bind)
             t_linkLibraries(dart_corelib)
             t_includeDirectories(include)
             t_includeDirectories(.) # needed because dart_api.h isn't complete
-            t_makeExecutable()
+            t_makeTest()
         endforeach()
     endmacro()
 

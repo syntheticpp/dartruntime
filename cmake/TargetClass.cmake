@@ -130,6 +130,12 @@ macro(t_makeExecutable)
 endmacro()
 
 
+macro(t_makeTest)
+    t_makeExecutable()
+    add_test(NAME ${t_name} COMMAND ${t_name})
+endmacro()
+
+
 macro(_addDependencies)
     if(t_dependencies)
         add_dependencies(${t_name} ${t_dependencies})
