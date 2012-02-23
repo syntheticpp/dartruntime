@@ -156,22 +156,68 @@ class ConstantValue: public Value {
 //                 | Branch <Value> <Instruction> <Instruction>
 //                 | Empty <Instruction>
 
+// M is a single argument macro.  It is applied to each concrete instruction
+// type name.  The concrete instruction classes are the name with Instr
+// concatenated.
+#define FOR_EACH_INSTRUCTION(M)                 \
+  M(JoinEntry)                                  \
+  M(TargetEntry)                                \
+  M(Do)                                         \
+  M(Bind)                                       \
+  M(Return)                                     \
+  M(Branch)
+
+
+// Forward declarations for Instruction classes.
+class BlockEntryInstr;
+class InstructionVisitor;
+#define FORWARD_DECLARATION(type) class type##Instr;
+FOR_EACH_INSTRUCTION(FORWARD_DECLARATION)
+#undef FORWARD_DECLARATION
+
+
+// Functions required in all concrete instruction classes.
+#define DECLARE_INSTRUCTION(type)                               \
+  virtual Tag tag() const { return k##type; }                   \
+  static type##Instr* cast(Instruction* instr) {                \
+    ASSERT(instr->Is##type());                                  \
+    return reinterpret_cast<type##Instr*>(instr);               \
+  }                                                             \
+  virtual Instruction* Accept(InstructionVisitor* visitor);
+
+
 class Instruction : public ZoneAllocated {
  public:
+  // Declare a tag for each concrete instruction type.
+#define DECLARE_TAG(type) k##type,
+  enum Tag {
+    FOR_EACH_INSTRUCTION(DECLARE_TAG)
+    kInstructionCount  // To follow the trailing comma from the macro.
+  };
+#undef DECLARE_TAG
+
   Instruction() : mark_(false) { }
 
-  virtual void set_successor(Instruction* instr) = 0;
+  // Pure virtual tag accessor.
+  virtual Tag tag() const = 0;
 
+  // Non-virtual type testing functions.
+#define DEFINE_TYPE_FUNCTIONS(type)                             \
+  bool Is##type() const { return tag() == k##type; }
+  FOR_EACH_INSTRUCTION(DEFINE_TYPE_FUNCTIONS)
+#undef DEFINE_TYPE_FUNCTIONS
+
+  // Type testing and conversions for other classes of instructions.
+  bool IsBlockEntry() const { return IsJoinEntry() || IsTargetEntry(); }
+
+  // Visiting support.
+  virtual Instruction* Accept(InstructionVisitor* visitor) = 0;
+
+  virtual void SetSuccessor(Instruction* instr) = 0;
   // Perform a postorder traversal of the instruction graph reachable from
-  // this instruction.  Append the result to the end of the in/out parameter
-  // visited.
-  virtual void Postorder(GrowableArray<Instruction*>* visited) = 0;
-
-  // Print an instruction without indentation, instruction number, or a
-  // trailing newline.
-  virtual void Print(
-      intptr_t instruction_index,
-      const GrowableArray<Instruction*>& instruction_list) const = 0;
+  // this instruction.  Accumulate basic block entries in the order visited
+  // in the in/out parameter 'block_entries'.
+  virtual void Postorder(GrowableArray<BlockEntryInstr*>* block_entries) = 0;
 
   // Mark bit to support non-reentrant recursive traversal (i.e.,
   // identification of cycles).  Before and after a traversal, all the nodes
@@ -179,16 +225,67 @@ class Instruction : public ZoneAllocated {
   bool mark() const { return mark_; }
   void flip_mark() { mark_ = !mark_; }
 
- protected:
-  // Helper for print handling of successors of nodes with a single successor.
-  // "goto %d" is printed if the successor is not the next instruction.
-  void PrintGotoSuccessor(
-      Instruction* successor,
-      intptr_t instruction_index,
-      const GrowableArray<Instruction*>& instruction_list) const;
-
  private:
   bool mark_;
+};
+
+
+// Basic block entries are administrative nodes.  Joins are the only nodes
+// with multiple predecessors.  Targets are the other basic block entries.
+// The types enforce edge-split form---joins are forbidden as the successors
+// of branches.
+class BlockEntryInstr : public Instruction {
+ public:
+  BlockEntryInstr() : Instruction(), block_number_(-1) { }
+
+  static BlockEntryInstr* cast(Instruction* instr) {
+    ASSERT(instr->IsBlockEntry());
+    return reinterpret_cast<BlockEntryInstr*>(instr);
+  }
+
+  intptr_t block_number() const { return block_number_; }
+  void set_block_number(intptr_t number) { block_number_ = number; }
+
+ private:
+  intptr_t block_number_;
+};
+
+
+class JoinEntryInstr : public BlockEntryInstr {
+ public:
+  JoinEntryInstr() : BlockEntryInstr(), successor_(NULL) { }
+
+  DECLARE_INSTRUCTION(JoinEntry)
+
+  virtual void SetSuccessor(Instruction* instr) {
+    ASSERT(successor_ == NULL);
+    successor_ = instr;
+  }
+
+  virtual void Postorder(GrowableArray<BlockEntryInstr*>* block_entries);
+
+ private:
+  Instruction* successor_;
+};
+
+
+class TargetEntryInstr : public BlockEntryInstr {
+ public:
+  TargetEntryInstr() : BlockEntryInstr(), block_number_(-1), successor_(NULL) {
+  }
+
+  DECLARE_INSTRUCTION(TargetEntry)
+
+  virtual void SetSuccessor(Instruction* instr) {
+    ASSERT(successor_ == NULL);
+    successor_ = instr;
+  }
+
+  virtual void Postorder(GrowableArray<BlockEntryInstr*>* block_entries);
+
+ private:
+  intptr_t block_number_;
+  Instruction* successor_;
 };
 
 
@@ -197,16 +294,16 @@ class DoInstr : public Instruction {
   explicit DoInstr(Computation* comp)
       : Instruction(), computation_(comp), successor_(NULL) { }
 
-  virtual void set_successor(Instruction* instr) {
+  DECLARE_INSTRUCTION(Do)
+
+  Computation* computation() const { return computation_; }
+
+  virtual void SetSuccessor(Instruction* instr) {
     ASSERT(successor_ == NULL);
     successor_ = instr;
   }
 
-  virtual void Postorder(GrowableArray<Instruction*>* visited);
-
-  virtual void Print(
-      intptr_t instruction_index,
-      const GrowableArray<Instruction*>& instruction_list) const;
+  virtual void Postorder(GrowableArray<BlockEntryInstr*>* block_entries);
 
  private:
   Computation* computation_;
@@ -222,16 +319,17 @@ class BindInstr : public Instruction {
         computation_(computation),
         successor_(NULL) { }
 
-  virtual void set_successor(Instruction* instr) {
+  DECLARE_INSTRUCTION(Bind)
+
+  intptr_t temp_index() const { return temp_index_; }
+  Computation* computation() const { return computation_; }
+
+  virtual void SetSuccessor(Instruction* instr) {
     ASSERT(successor_ == NULL);
     successor_ = instr;
   }
 
-  virtual void Postorder(GrowableArray<Instruction*>* visited);
-
-  virtual void Print(
-      intptr_t instruction_index,
-      const GrowableArray<Instruction*>& instruction_list) const;
+  virtual void Postorder(GrowableArray<BlockEntryInstr*>* block_entries);
 
  private:
   const intptr_t temp_index_;
@@ -240,57 +338,17 @@ class BindInstr : public Instruction {
 };
 
 
-class JoinEntryInstr : public Instruction {
- public:
-  JoinEntryInstr() : Instruction(), successor_(NULL) { }
-
-  virtual void set_successor(Instruction* instr) {
-    ASSERT(successor_ == NULL);
-    successor_ = instr;
-  }
-
-  virtual void Postorder(GrowableArray<Instruction*>* visited);
-
-  virtual void Print(
-      intptr_t instruction_index,
-      const GrowableArray<Instruction*>& instruction_list) const;
-
- private:
-  Instruction* successor_;
-};
-
-
-class TargetEntryInstr : public Instruction {
- public:
-  TargetEntryInstr() : Instruction(), successor_(NULL) { }
-
-  virtual void set_successor(Instruction* instr) {
-    ASSERT(successor_ == NULL);
-    successor_ = instr;
-  }
-
-  virtual void Postorder(GrowableArray<Instruction*>* visited);
-
-  virtual void Print(
-      intptr_t instruction_index,
-      const GrowableArray<Instruction*>& instruction_list) const;
-
- private:
-  Instruction* successor_;
-};
-
-
 class ReturnInstr : public Instruction {
  public:
   explicit ReturnInstr(Value* value) : Instruction(), value_(value) { }
 
-  virtual void set_successor(Instruction* instr) { UNREACHABLE(); }
+  DECLARE_INSTRUCTION(Return)
 
-  virtual void Postorder(GrowableArray<Instruction*>* visited);
+  Value* value() const { return value_; }
 
-  virtual void Print(
-      intptr_t instruction_index,
-      const GrowableArray<Instruction*>& instruction_list) const;
+  virtual void SetSuccessor(Instruction* instr) { UNREACHABLE(); }
+
+  virtual void Postorder(GrowableArray<BlockEntryInstr*>* block_entries);
 
  private:
   Value* value_;
@@ -305,21 +363,44 @@ class BranchInstr : public Instruction {
         true_successor_(NULL),
         false_successor_(NULL) { }
 
-  virtual void set_successor(Instruction* instr) { UNREACHABLE(); }
+  DECLARE_INSTRUCTION(Branch)
+
+  Value* value() const { return value_; }
+  TargetEntryInstr* true_successor() const { return true_successor_; }
+  TargetEntryInstr* false_successor() const { return false_successor_; }
 
   TargetEntryInstr** true_successor_address() { return &true_successor_; }
   TargetEntryInstr** false_successor_address() { return &false_successor_; }
 
-  virtual void Postorder(GrowableArray<Instruction*>* visited);
+  virtual void SetSuccessor(Instruction* instr) { UNREACHABLE(); }
 
-  virtual void Print(
-      intptr_t instruction_index,
-      const GrowableArray<Instruction*>& instruction_list) const;
+  virtual void Postorder(GrowableArray<BlockEntryInstr*>* block_entries);
 
  private:
   Value* value_;
   TargetEntryInstr* true_successor_;
   TargetEntryInstr* false_successor_;
+};
+
+#undef DECLARE_INSTRUCTION
+
+
+class InstructionVisitor {
+ public:
+  InstructionVisitor() { }
+  virtual ~InstructionVisitor() { }
+
+  // Visit each block in the array list in reverse, and for each block its
+  // instructions in order from the block entry to exit.
+  void VisitBlocks(const GrowableArray<BlockEntryInstr*>& block_order);
+
+#define DECLARE_VISIT(type)                             \
+  virtual void Visit##type(type##Instr* instr) { }
+  FOR_EACH_INSTRUCTION(DECLARE_VISIT)
+#undef DECLARE_VISIT
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(InstructionVisitor);
 };
 
 
