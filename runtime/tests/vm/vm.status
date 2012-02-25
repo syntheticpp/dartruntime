@@ -6,3 +6,4 @@ prefix vm
 
 # When a spawned isolate throws an uncaught exception, we terminate the vm.
 RunLoop_ExceptionChild: Fail
+
