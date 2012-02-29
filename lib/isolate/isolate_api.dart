@@ -2,8 +2,44 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-// Dart core library.
-// TODO(sigmund): move to dart:isolate
+/**
+ * The initial [ReceivePort] available by default for this isolate. This
+ * [ReceivePort] is created automatically and it is commonly used to establish
+ * the first communication between isolates (see [spawnFunction] and
+ * [spawnUri]).
+ */
+ReceivePort get port() => _port;
+
+/**
+ * Creates and spawns an isolate that shares the same code as the current
+ * isolate, but that starts from [topLevelFunction]. The [topLevelFunction]
+ * argument must be a static top-level function or a static method that takes no
+ * arguments. It is illegal to pass a function closure.
+ *
+ * When any isolate starts (even the main script of the application), a default
+ * [ReceivePort] is created for it. This port is available from the top-level
+ * getter [port] defined in this library.
+ *
+ * [spawnFunction] returns a [SendPort] derived from the child isolate's default
+ * port.
+ *
+ * See comments at the top of this library for more details.
+ */
+// Note this feature is not yet available in the dartvm.
+SendPort spawnFunction(void topLevelFunction()) {
+  return _spawnFunction(topLevelFunction);
+}
+
+/**
+ * Creates and spawns an isolate whose code is available at [uri].  Like with
+ * [spawnFunction], the child isolate will have a default [ReceivePort], and a
+ * this function returns a [SendPort] derived from it.
+ *
+ * See comments at the top of this library for more details.
+ */
+SendPort spawnUri(String uri) {
+  return _spawnUri(uri);
+}
 
 /**
  * [SendPort]s are created from [ReceivePort]s. Any message sent through
@@ -45,7 +81,6 @@ interface SendPort extends Hashable {
 
 }
 
-
 /**
  * [ReceivePort]s, together with [SendPort]s, are the only means of
  * communication between isolates. [ReceivePort]s have a [:toSendPort:] method
@@ -55,7 +90,7 @@ interface SendPort extends Hashable {
  *
  * A [ReceivePort] may have many [SendPort]s.
  */
-interface ReceivePort default ReceivePortFactory {
+interface ReceivePort default _ReceivePortFactory {
 
   /**
    * Opens a long-lived port for receiving messages. The returned port
@@ -95,6 +130,8 @@ interface ReceivePort default ReceivePortFactory {
 }
 
 /**
+ * NOTE: This API will be deprecated soon.
+ *
  * The [Isolate] class serves two purposes: (1) as template for spawning a new
  * isolate, and (2) as entry-point for the newly spawned isolate.
  *
@@ -110,8 +147,14 @@ interface ReceivePort default ReceivePortFactory {
  * Isolates may be "heavy" or "light". Heavy isolates live in their own thread,
  * whereas "light" isolates live in the same thread as the isolate which spawned
  * them.
+ *
+ * NOTE: once [spawnFunction] and [spawnUri] are supported in both frog and the
+ * dartvm, this class will be removed. The distinction of heavy and light will
+ * be removed too. Thus far the main use for 'light' isolates is for running
+ * isolates that share access to the DOM. A special API will be added for this
+ * purpose soon. See the library top-level comments for more details.
  */
-// TODO(sigmund): delete once we implement the new isolates in the vm
+// TODO(sigmund): delete once we implement the new API in the vm
 class Isolate {
 
   /**
@@ -147,7 +190,7 @@ class Isolate {
    * [:myIsolate.spawn().then((SendPort port) { port.send('hi there'); });:]
    */
   Future<SendPort> spawn() {
-    return IsolateNatives.spawn(this, _isLight);
+    return _IsolateNatives.spawn(this, _isLight);
   }
 
   // The private run method is invoked with the receive port. Before

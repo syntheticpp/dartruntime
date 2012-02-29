@@ -24,6 +24,10 @@ class FlowGraphBuilder: public ValueObject {
 
   void BuildGraph();
 
+  const GrowableArray<BlockEntryInstr*>* blocks() const {
+    return &postorder_block_entries_;
+  }
+
   const ParsedFunction& parsed_function() const { return parsed_function_; }
 
   void Bailout(const char* reason);
@@ -93,6 +97,8 @@ class EffectGraphVisitor : public AstNodeVisitor {
   StoreLocalComp* TranslateStoreLocal(const StoreLocalNode& node);
   StaticCallComp* TranslateStaticCall(const StaticCallNode& node);
   InstanceCallComp* TranslateInstanceCall(const InstanceCallNode& node);
+  void TranslateArgumentList(const ArgumentListNode& node,
+                             ZoneGrowableArray<Value*>* values);
 
   void CloseFragment() { exit_ = NULL; }
   intptr_t AllocateTempIndex() { return temp_index_++; }
@@ -137,7 +143,7 @@ class ValueGraphVisitor : public EffectGraphVisitor {
   // temporary value (i.e., set the output parameters).
   void ReturnValueOf(Computation* computation) {
     AddInstruction(new BindInstr(temp_index(), computation));
-    value_ = new TempValue(AllocateTempIndex());
+    value_ = new TempVal(AllocateTempIndex());
   }
 
   // Output parameters.
@@ -199,7 +205,7 @@ class TestGraphVisitor : public EffectGraphVisitor {
   // Helper to bind a computation and branch on its value.
   void BranchOnValueOf(Computation* computation) {
     AddInstruction(new BindInstr(temp_index(), computation));
-    BranchOnValue(new TempValue(temp_index()));
+    BranchOnValue(new TempVal(temp_index()));
   }
 
   // Output parameters.

@@ -129,21 +129,9 @@ interface File default _File {
   /**
    * Create a new independent input stream for the file. The file
    * input stream must be closed when no longer used to free up system
-   * resources.  The [inputStreamHandler] is called with the result
-   * when the openInputStream operation completes.
+   * resources.
    */
   InputStream openInputStream();
-
-  /**
-   * Synchronously create a new independent input stream for the
-   * file. The file input stream must be closed when no longer used to
-   * free up system resources.
-   *
-   * Even though this call to open the input stream is synchronous the
-   * input stream itself is asynchronous as is the case for all input
-   * streams.
-   */
-  InputStream openInputStreamSync();
 
   /**
    * Creates a new independent output stream for the file. The file
@@ -163,19 +151,6 @@ interface File default _File {
   OutputStream openOutputStream([FileMode mode]);
 
   /**
-   * Synchronously creates a new independent output stream for the
-   * file. The file output stream must be closed when no longer used
-   * to free up system resources.
-   *
-   * See [openOutputStream] for information on the [:mode:] argument.
-   *
-   * Even though this call to open the output stream is synchronous
-   * the output stream itself is asynchronous as is the case for all
-   * output streams.
-   */
-  OutputStream openOutputStreamSync([FileMode mode]);
-
-  /**
    * Read the entire file contents as a list of bytes. When the
    * operation completes the [readAsBytesHandler] is called.
    * The [errorHandler] is called if the operation fails.
@@ -188,7 +163,7 @@ interface File default _File {
   List<int> readAsBytesSync();
 
   /**
-   * Read the entire file contents as text using the give [encoding]
+   * Read the entire file contents as text using the given [encoding]
    * ('UTF-8', 'ISO-8859-1', 'ASCII'). By default the encoding is
    * 'UTF-8'.
    *
@@ -200,7 +175,7 @@ interface File default _File {
 
   /**
    * Synchronously read the entire file contents as text using the
-   * give [encoding] ('UTF-8', 'ISO-8859-1', 'ASCII'). By default the
+   * given [encoding] ('UTF-8', 'ISO-8859-1', 'ASCII'). By default the
    * encoding is 'UTF-8'.
    */
   String readAsTextSync([String encoding]);
@@ -218,7 +193,7 @@ interface File default _File {
 
   /**
    * Synchronously read the entire file contents as lines of text
-   * using the give [encoding] ('UTF-8', 'ISO-8859-1', 'ASCII'). By
+   * using the given [encoding] ('UTF-8', 'ISO-8859-1', 'ASCII'). By
    * default the encoding is 'UTF-8'.
    */
   List<String> readAsLinesSync([String encoding]);
@@ -257,18 +232,6 @@ interface File default _File {
    * completes.
    */
   void set openHandler(void handler(RandomAccessFile openedFile));
-
-  /**
-   * Sets the handler that gets called when an [openInputStream]
-   * operation completes.
-   */
-  void set inputStreamHandler(void handler(InputStream stream));
-
-  /**
-   * Sets the handler that gets called when an [openOutputStream]
-   * operation completes.
-   */
-  void set outputStreamHandler(void handler(OutputStream stream));
 
   /**
    * Set the handler that gets called when a [readAsBytes] operation
