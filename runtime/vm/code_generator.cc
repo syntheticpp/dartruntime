@@ -83,7 +83,7 @@ const Array& CodeGenerator::ArgumentsDescriptor(
   // arguments, the number of positional arguments, alphabetically sorted
   // pairs of name/position, and a terminating null.
   const int descriptor_len = 3 + (2 * num_named_args);
-  Array& descriptor = Array::ZoneHandle(Array::New(descriptor_len));
+  Array& descriptor = Array::ZoneHandle(Array::New(descriptor_len, Heap::kOld));
 
   // Set total number of passed arguments.
   descriptor.SetAt(0, Smi::Handle(Smi::New(num_arguments)));
@@ -1136,6 +1136,11 @@ void FunctionsCache::EnterFunctionAt(int i,
 void FunctionsCache::AddCompiledFunction(const Function& function,
                                          int num_arguments,
                                          int num_named_arguments) {
+// TODO(srdjan): Evaluate if populating the function cache is needed.
+// It is turned off currently because we do not populate code objects
+// in snapshot and hence end up in an inconsistent state as function
+// cache is populated but there are no code objects.
+#if 0
   ASSERT(function.HasCode());
   Array& cache = Array::Handle(class_.functions_cache());
   // Search for first free slot. Last entry is always NULL object.
@@ -1158,6 +1163,7 @@ void FunctionsCache::AddCompiledFunction(const Function& function,
                   function,
                   num_arguments,
                   num_named_arguments);
+#endif
 }
 
 

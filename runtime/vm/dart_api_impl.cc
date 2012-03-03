@@ -62,22 +62,20 @@ const char* CheckIsolateState(Isolate* isolate, bool generating_snapshot) {
         ClassFinalizer::FinalizePendingClassesForSnapshotCreation() :
         ClassFinalizer::FinalizePendingClasses();
   }
-  if (success && !generating_snapshot) {
-    success = isolate->object_store()->PreallocateObjects();
-  }
   if (success) {
-    return NULL;
-  } else {
-    // Make a copy of the error message as the original message string
-    // may get deallocated when we return back from the Dart API call.
-    const Error& err =
-        Error::Handle(isolate->object_store()->sticky_error());
-    const char* errmsg = err.ToErrorCString();
-    intptr_t errlen = strlen(errmsg) + 1;
-    char* msg = reinterpret_cast<char*>(Api::Allocate(errlen));
-    OS::SNPrint(msg, errlen, "%s", errmsg);
-    return msg;
+    success = isolate->object_store()->PreallocateObjects();
+    if (success) {
+      return NULL;
+    }
   }
+  // Make a copy of the error message as the original message string
+  // may get deallocated when we return back from the Dart API call.
+  const Error& err = Error::Handle(isolate->object_store()->sticky_error());
+  const char* errmsg = err.ToErrorCString();
+  intptr_t errlen = strlen(errmsg) + 1;
+  char* msg = reinterpret_cast<char*>(Api::Allocate(errlen));
+  OS::SNPrint(msg, errlen, "%s", errmsg);
+  return msg;
 }
 
 
@@ -458,6 +456,39 @@ DART_EXPORT bool Dart_IsWeakPersistentHandle(Dart_Handle object) {
   return state->IsValidWeakPersistentHandle(object);
 }
 
+
+DART_EXPORT Dart_Handle Dart_NewWeakReferenceSet(Dart_Handle* keys,
+                                                 intptr_t num_keys,
+                                                 Dart_Handle* values,
+                                                 intptr_t num_values) {
+  Isolate* isolate = Isolate::Current();
+  CHECK_ISOLATE(isolate);
+  ApiState* state = isolate->api_state();
+  ASSERT(state != NULL);
+  if (keys == NULL) {
+    return Api::NewError("%s expects argument 'keys' to be non-null.",
+                         CURRENT_FUNC);
+  }
+  if (num_keys <= 0) {
+    return Api::NewError(
+        "%s expects argument 'num_keys' to be greater than 0.",
+        CURRENT_FUNC);
+  }
+  if (values == NULL) {
+    return Api::NewError("%s expects argument 'values' to be non-null.",
+                         CURRENT_FUNC);
+  }
+  if (num_values <= 0) {
+    return Api::NewError(
+        "%s expects argument 'num_values' to be greater than 0.",
+        CURRENT_FUNC);
+  }
+
+  WeakReference* reference = new WeakReference(keys, num_keys,
+                                               values, num_values);
+  state->DelayWeakReference(reference);
+  return Api::Success();
+}
 
 // --- Initialization and Globals ---
 
@@ -1567,7 +1598,7 @@ DART_EXPORT Dart_Handle Dart_ListGetAsBytes(Dart_Handle list,
   if (obj.IsArray()) {
     Array& array_obj = Array::Handle();
     array_obj ^= obj.raw();
-    if ((offset + length) <= array_obj.Length()) {
+    if (Utils::RangeCheck(offset, length, array_obj.Length())) {
       Object& element = Object::Handle();
       Integer& integer  = Integer::Handle();
       for (int i = 0; i < length; i++) {
@@ -1646,7 +1677,7 @@ DART_EXPORT Dart_Handle Dart_ListSetAsBytes(Dart_Handle list,
     Array& array_obj = Array::Handle();
     array_obj ^= obj.raw();
     Integer& integer = Integer::Handle();
-    if ((offset + length) <= array_obj.Length()) {
+    if (Utils::RangeCheck(offset, length, array_obj.Length())) {
       for (int i = 0; i < length; i++) {
         integer = Integer::New(native_array[i]);
         array_obj.SetAt(offset + i, integer);
