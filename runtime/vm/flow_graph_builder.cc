@@ -471,18 +471,13 @@ void EffectGraphVisitor::VisitInstanceGetterNode(InstanceGetterNode* node) {
 
 
 void EffectGraphVisitor::VisitInstanceSetterNode(InstanceSetterNode* node) {
-  // We preallocate a temporary to overlap with the value of the assignment.
-  const Smi& zero = Smi::ZoneHandle(Smi::New(0));
-  AddInstruction(new BindInstr(temp_index(), new ConstantVal(zero)));
-  TempVal* placeholder = new TempVal(temp_index());
-  ArgumentGraphVisitor for_receiver(owner(), temp_index() + 1);
+  ArgumentGraphVisitor for_receiver(owner(), temp_index());
   node->receiver()->Visit(&for_receiver);
   Append(for_receiver);
   ArgumentGraphVisitor for_value(owner(), for_receiver.temp_index());
   node->value()->Visit(&for_value);
   Append(for_value);
   InstanceSetterComp* setter = new InstanceSetterComp(node,
-                                                      placeholder,
                                                       for_receiver.value(),
                                                       for_value.value());
   ReturnComputation(setter);
@@ -548,23 +543,56 @@ void EffectGraphVisitor::VisitStoreLocalNode(StoreLocalNode* node) {
 
 void EffectGraphVisitor::VisitLoadInstanceFieldNode(
     LoadInstanceFieldNode* node) {
-  Bailout("EffectGraphVisitor::VisitLoadInstanceFieldNode");
+  ValueGraphVisitor for_instance(owner(), temp_index());
+  node->instance()->Visit(&for_instance);
+  Append(for_instance);
+  LoadInstanceFieldComp* load =
+      new LoadInstanceFieldComp(node, for_instance.value());
+  ReturnComputation(load);
 }
 
 
 void EffectGraphVisitor::VisitStoreInstanceFieldNode(
     StoreInstanceFieldNode* node) {
-  Bailout("EffectGraphVisitor::VisitStoreInstanceFieldNode");
+  ValueGraphVisitor for_instance(owner(), temp_index());
+  node->instance()->Visit(&for_instance);
+  Append(for_instance);
+  ValueGraphVisitor for_value(owner(), for_instance.temp_index());
+  node->value()->Visit(&for_value);
+  Append(for_value);
+  Value* store_value = for_value.value();
+  if (FLAG_enable_type_checks) {
+    const AbstractType& type = AbstractType::ZoneHandle(node->field().type());
+    AssertAssignableComp* assert = new AssertAssignableComp(store_value, type);
+    AddInstruction(new BindInstr(temp_index(), assert));
+    store_value = new TempVal(temp_index());
+  }
+  StoreInstanceFieldComp* store =
+      new StoreInstanceFieldComp(node, for_instance.value(), store_value);
+  ReturnComputation(store);
 }
 
 
 void EffectGraphVisitor::VisitLoadStaticFieldNode(LoadStaticFieldNode* node) {
-  Bailout("EffectGraphVisitor::VisitLoadStaticFieldNode");
+  LoadStaticFieldComp* load = new LoadStaticFieldComp(node->field());
+  ReturnComputation(load);
 }
 
 
 void EffectGraphVisitor::VisitStoreStaticFieldNode(StoreStaticFieldNode* node) {
-  Bailout("EffectGraphVisitor::VisitStoreStaticFieldNode");
+  ValueGraphVisitor for_value(owner(), temp_index());
+  node->value()->Visit(&for_value);
+  Append(for_value);
+  Value* store_value = for_value.value();
+  if (FLAG_enable_type_checks) {
+    const AbstractType& type = AbstractType::ZoneHandle(node->field().type());
+    AssertAssignableComp* assert = new AssertAssignableComp(store_value, type);
+    AddInstruction(new BindInstr(temp_index(), assert));
+    store_value = new TempVal(temp_index());
+  }
+  StoreStaticFieldComp* store =
+      new StoreStaticFieldComp(node, store_value);
+  ReturnComputation(store);
 }
 
 
@@ -587,17 +615,7 @@ void EffectGraphVisitor::VisitLoadIndexedNode(LoadIndexedNode* node) {
 
 
 void EffectGraphVisitor::VisitStoreIndexedNode(StoreIndexedNode* node) {
-  // This is not a straight instance call to e0.[]=(e1, e2), it is a
-  // call to
-  //
-  // (a, i, v) { a.[]=(i, v); return v; }(e0, e1, e2)
-  //
-  // Without constructing that function, we simulate it at the IL
-  // level by preallocating a slot for the return value.
-  const Smi& zero = Smi::ZoneHandle(Smi::New(0));
-  AddInstruction(new BindInstr(temp_index(), new ConstantVal(zero)));
-  TempVal* placeholder = new TempVal(temp_index());
-  ArgumentGraphVisitor for_array(owner(), temp_index() + 1);
+  ArgumentGraphVisitor for_array(owner(), temp_index());
   node->array()->Visit(&for_array);
   Append(for_array);
   ArgumentGraphVisitor for_index(owner(), for_array.temp_index());
@@ -607,7 +625,6 @@ void EffectGraphVisitor::VisitStoreIndexedNode(StoreIndexedNode* node) {
   node->value()->Visit(&for_value);
   Append(for_value);
   StoreIndexedComp* store = new StoreIndexedComp(node,
-                                                 placeholder,
                                                  for_array.value(),
                                                  for_index.value(),
                                                  for_value.value());
@@ -772,10 +789,40 @@ void FlowGraphPrinter::VisitNativeCall(NativeCallComp* comp) {
 }
 
 
+void FlowGraphPrinter::VisitLoadInstanceField(LoadInstanceFieldComp* comp) {
+  OS::Print("LoadInstanceField(%s, ",
+      String::Handle(comp->field().name()).ToCString());
+  comp->instance()->Accept(this);
+  OS::Print(")");
+}
+
+
+void FlowGraphPrinter::VisitStoreInstanceField(StoreInstanceFieldComp* comp) {
+  OS::Print("StoreInstanceField(%s, ",
+      String::Handle(comp->field().name()).ToCString());
+  comp->instance()->Accept(this);
+  OS::Print(", ");
+  comp->value()->Accept(this);
+  OS::Print(")");
+}
+
+
+void FlowGraphPrinter::VisitLoadStaticField(LoadStaticFieldComp* comp) {
+  OS::Print("LoadStaticField(%s)",
+      String::Handle(comp->field().name()).ToCString());
+}
+
+
+void FlowGraphPrinter::VisitStoreStaticField(StoreStaticFieldComp* comp) {
+  OS::Print("StoreStaticField(%s, ",
+      String::Handle(comp->field().name()).ToCString());
+  comp->value()->Accept(this);
+  OS::Print(")");
+}
+
+
 void FlowGraphPrinter::VisitStoreIndexed(StoreIndexedComp* comp) {
   OS::Print("StoreIndexed(");
-  comp->placeholder()->Accept(this);
-  OS::Print(", ");
   comp->array()->Accept(this);
   OS::Print(", ");
   comp->index()->Accept(this);
@@ -787,8 +834,6 @@ void FlowGraphPrinter::VisitStoreIndexed(StoreIndexedComp* comp) {
 
 void FlowGraphPrinter::VisitInstanceSetter(InstanceSetterComp* comp) {
   OS::Print("InstanceSetter(");
-  comp->placeholder()->Accept(this);
-  OS::Print(", ");
   comp->receiver()->Accept(this);
   OS::Print(", ");
   comp->value()->Accept(this);

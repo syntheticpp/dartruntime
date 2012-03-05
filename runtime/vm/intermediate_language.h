@@ -25,9 +25,14 @@ class LocalVariable;
 // | StaticCall <StaticCallNode> <Value> ...
 // | LoadLocal <LocalVariable>
 // | StoreLocal <LocalVariable> <Value>
-// | StoreIndexed <Value> <Value> <Value> <Value>
 // | StrictCompare <Token::kind> <Value> <Value>
 // | NativeCall <NativeBodyNode>
+// | StoreIndexed <StoreIndexedNode> <Value> <Value> <Value>
+// | InstanceSetter <InstanceSetterNode> <Value> <Value>
+// | LoadInstanceField <LoadInstanceFieldNode> <Value>
+// | StoreInstanceField <StoreInstanceFieldNode> <Value> <Value>
+// | LoadStaticField <Field>
+// | StoreStaticField <StoreStaticFieldNode> <Value>
 //
 // <Value> ::=
 //   Temp <int>
@@ -53,6 +58,10 @@ class LocalVariable;
   M(NativeCall, NativeCallComp)                                                \
   M(StoreIndexed, StoreIndexedComp)                                            \
   M(InstanceSetter, InstanceSetterComp)                                        \
+  M(LoadInstanceField, LoadInstanceFieldComp)                                  \
+  M(StoreInstanceField, StoreInstanceFieldComp)                                \
+  M(LoadStaticField, LoadStaticFieldComp)                                      \
+  M(StoreStaticField, StoreStaticFieldComp)
 
 
 #define FORWARD_DECLARATION(ShortName, ClassName) class ClassName;
@@ -284,18 +293,101 @@ class NativeCallComp : public Computation {
 };
 
 
+class LoadInstanceFieldComp : public Computation {
+ public:
+  LoadInstanceFieldComp(LoadInstanceFieldNode* ast_node, Value* instance)
+      : ast_node_(*ast_node), instance_(instance) {
+    ASSERT(instance_ != NULL);
+  }
+
+  DECLARE_COMPUTATION(LoadInstanceFieldComp)
+
+  const Field& field() const { return ast_node_.field(); }
+
+  Value* instance() const { return instance_; }
+
+ private:
+  const LoadInstanceFieldNode& ast_node_;
+  Value* instance_;
+
+  DISALLOW_COPY_AND_ASSIGN(LoadInstanceFieldComp);
+};
+
+
+class StoreInstanceFieldComp : public Computation {
+ public:
+  StoreInstanceFieldComp(StoreInstanceFieldNode* ast_node,
+                         Value* instance,
+                         Value* value)
+      : ast_node_(*ast_node), instance_(instance), value_(value) {
+    ASSERT(instance_ != NULL);
+    ASSERT(value_ != NULL);
+  }
+
+  DECLARE_COMPUTATION(StoreInstanceFieldComp)
+
+  intptr_t node_id() const { return ast_node_.id(); }
+  intptr_t token_index() const { return ast_node_.token_index(); }
+  const Field& field() const { return ast_node_.field(); }
+
+  Value* instance() const { return instance_; }
+  Value* value() const { return value_; }
+
+ private:
+  const StoreInstanceFieldNode& ast_node_;
+  Value* instance_;
+  Value* value_;
+
+  DISALLOW_COPY_AND_ASSIGN(StoreInstanceFieldComp);
+};
+
+
+class LoadStaticFieldComp : public Computation {
+ public:
+  explicit LoadStaticFieldComp(const Field& field) : field_(field) {}
+
+  DECLARE_COMPUTATION(LoadStaticFieldComp);
+
+  const Field& field() const { return field_; }
+
+ private:
+  const Field& field_;
+
+  DISALLOW_COPY_AND_ASSIGN(LoadStaticFieldComp);
+};
+
+
+class StoreStaticFieldComp : public Computation {
+ public:
+  StoreStaticFieldComp(StoreStaticFieldNode* ast_node, Value* value)
+      : ast_node_(*ast_node), value_(value) {
+    ASSERT(value != NULL);
+  }
+
+  DECLARE_COMPUTATION(StoreStaticFieldComp);
+
+  intptr_t token_index() const { return ast_node_.token_index(); }
+  intptr_t node_id() const { return ast_node_.id(); }
+  const Field& field() const { return ast_node_.field(); }
+  Value* value() const { return value_; }
+
+ private:
+  const StoreStaticFieldNode& ast_node_;
+  Value* value_;
+
+  DISALLOW_COPY_AND_ASSIGN(StoreStaticFieldComp);
+};
+
+
 // Not simply an InstanceCall because it has somewhat more complicated
-// semantics: the value operand is preserved in a placeholder (the first
-// operand is a preallocated slot that can be used).
+// semantics: the value operand is preserved before the call.
 class StoreIndexedComp : public Computation {
  public:
   StoreIndexedComp(StoreIndexedNode* node,
-                   Value* placeholder,
                    Value* array,
                    Value* index,
                    Value* value)
       : ast_node_(*node),
-        placeholder_(placeholder),
         array_(array),
         index_(index),
         value_(value) { }
@@ -306,14 +398,12 @@ class StoreIndexedComp : public Computation {
   intptr_t node_id() const { return ast_node_.id(); }
   intptr_t token_index() const { return ast_node_.token_index(); }
 
-  Value* placeholder() const { return placeholder_; }
   Value* array() const { return array_; }
   Value* index() const { return index_; }
   Value* value() const { return value_; }
 
  private:
   const StoreIndexedNode& ast_node_;
-  Value* placeholder_;
   Value* array_;
   Value* index_;
   Value* value_;
@@ -323,16 +413,13 @@ class StoreIndexedComp : public Computation {
 
 
 // Not simply an InstanceCall because it has somewhat more complicated
-// semantics: the value operand is preserved in a placeholder (the first
-// operand is a preallocate slot that can be used).
+// semantics: the value operand is preserved before the call.
 class InstanceSetterComp : public Computation {
  public:
   InstanceSetterComp(InstanceSetterNode* node,
-                     Value* placeholder,
                      Value* receiver,
                      Value* value)
       : ast_node_(*node),
-        placeholder_(placeholder),
         receiver_(receiver),
         value_(value) { }
 
@@ -343,13 +430,11 @@ class InstanceSetterComp : public Computation {
   intptr_t token_index() const { return ast_node_.token_index(); }
   const String& field_name() const { return ast_node_.field_name(); }
 
-  Value* placeholder() const { return placeholder_; }
   Value* receiver() const { return receiver_; }
   Value* value() const { return value_; }
 
  private:
   const InstanceSetterNode& ast_node_;
-  Value* placeholder_;
   Value* receiver_;
   Value* value_;
 

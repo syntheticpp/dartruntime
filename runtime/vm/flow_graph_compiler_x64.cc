@@ -32,8 +32,16 @@ void FlowGraphCompiler::Bailout(const char* reason) {
   Isolate::Current()->long_jump_base()->Jump(1, error);
 }
 
-
 #define __ assembler_->
+
+
+void FlowGraphCompiler::GenerateAssertAssignable(intptr_t node_id,
+                                                 intptr_t token_index,
+                                                 const AbstractType& dst_type,
+                                                 const String& dst_name) {
+  Bailout("GenerateAssertAssignable");
+}
+
 
 void FlowGraphCompiler::LoadValue(Value* value) {
   if (value->IsConstant()) {
@@ -81,6 +89,15 @@ template <typename T> static bool VerifyCallComputation(T* comp) {
       if (temp->index() != previous + 1) return false;
     }
     previous = temp->index();
+  }
+  return true;
+}
+
+
+// Truee iff. the v2 is above v1 on stack, or one of them is constant.
+static bool VerifyValues(Value* v1, Value* v2) {
+  if (v1->IsTemp() && v2->IsTemp()) {
+    return (v1->AsTemp()->index() + 1) == v2->AsTemp()->index();
   }
   return true;
 }
@@ -176,15 +193,49 @@ void FlowGraphCompiler::VisitNativeCall(NativeCallComp* comp) {
 }
 
 
+void FlowGraphCompiler::VisitLoadInstanceField(LoadInstanceFieldComp* comp) {
+  LoadValue(comp->instance());  // -> RAX.
+  __ movq(RAX, FieldAddress(RAX, comp->field().Offset()));
+}
+
+
+void FlowGraphCompiler::VisitStoreInstanceField(StoreInstanceFieldComp* comp) {
+  VerifyValues(comp->instance(), comp->value());
+  LoadValue(comp->value());
+  __ movq(R10, RAX);
+  LoadValue(comp->instance());  // -> RAX.
+  __ StoreIntoObject(RAX, FieldAddress(RAX, comp->field().Offset()), R10);
+}
+
+
+
+void FlowGraphCompiler::VisitLoadStaticField(LoadStaticFieldComp* comp) {
+  __ LoadObject(RDX, comp->field());
+  __ movq(RAX, FieldAddress(RDX, Field::value_offset()));
+}
+
+
+void FlowGraphCompiler::VisitStoreStaticField(StoreStaticFieldComp* comp) {
+  LoadValue(comp->value());
+  __ LoadObject(RDX, comp->field());
+  __ StoreIntoObject(RDX, FieldAddress(RDX, Field::value_offset()), RAX);
+}
+
+
 void FlowGraphCompiler::VisitStoreIndexed(StoreIndexedComp* comp) {
   // Call operator []= but preserve the third argument value under the
   // arguments as the result of the computation.
   const String& function_name =
       String::ZoneHandle(String::NewSymbol(Token::Str(Token::kASSIGN_INDEX)));
-  // Placeholder is under value, index, and receiver.
-  const int kPlaceholderOffset = 3 * kWordSize;
-  __ movq(RAX, Address(RSP, 0));  // Value.
-  __ movq(Address(RSP, kPlaceholderOffset), RAX);
+
+  // Insert a copy of the third (last) argument under the arguments.
+  __ popq(RAX);  // Value.
+  __ popq(RBX);  // Index.
+  __ popq(RCX);  // Receiver.
+  __ pushq(RAX);
+  __ pushq(RCX);
+  __ pushq(RBX);
+  __ pushq(RAX);
   EmitInstanceCall(comp->node_id(), comp->token_index(), function_name, 3,
                    Array::ZoneHandle(), 1);
   __ popq(RAX);
@@ -196,10 +247,13 @@ void FlowGraphCompiler::VisitInstanceSetter(InstanceSetterComp* comp) {
   // computation, then call the getter.
   const String& function_name =
       String::ZoneHandle(Field::SetterSymbol(comp->field_name()));
-  // Placeholder is under value and receiver.
-  const int kPlaceholderOffset = 2 * kWordSize;
-  __ movq(RAX, Address(RSP, 0));  // Value.
-  __ movq(Address(RSP, kPlaceholderOffset), RAX);
+
+  // Insert a copy of the second (last) argument under the arguments.
+  __ popq(RAX);  // Value.
+  __ popq(RBX);  // Reciever.
+  __ pushq(RAX);
+  __ pushq(RBX);
+  __ pushq(RAX);
   EmitInstanceCall(comp->node_id(), comp->token_index(), function_name, 2,
                    Array::ZoneHandle(), 1);
   __ popq(RAX);
