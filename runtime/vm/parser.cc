@@ -1699,9 +1699,9 @@ SequenceNode* Parser::ParseConstructor(const Function& func,
       AstNode* arg = ctor_args->NodeAt(i);
       if (!arg->IsLoadLocalNode() && !arg->IsLiteralNode()) {
         LocalVariable* temp =
-        CreateTempConstVariable(arg->token_index(), arg->id(), "sca");
+            CreateTempConstVariable(arg->token_index(), arg->id(), "sca");
         AstNode* save_temp =
-        new StoreLocalNode(arg->token_index(), *temp, arg);
+            new StoreLocalNode(arg->token_index(), *temp, arg);
         ctor_args->SetNodeAt(i, save_temp);
       }
     }
@@ -4181,7 +4181,8 @@ void Parser::ParseStatementSequence() {
   while (CurrentToken() != Token::kRBRACE) {
     const intptr_t statement_pos = token_index_;
     AstNode* statement = ParseStatement();
-    if (statement != NULL) {
+    // Do not add statements with no effect (e.g., LoadLocalNode).
+    if (statement != NULL && !statement->IsLoadLocalNode()) {
       if (!dead_code_allowed && abrupt_completing_seen) {
         ErrorMsg(statement_pos, "dead code after abrupt completing statement");
       }
@@ -5373,6 +5374,12 @@ void Parser::ErrorMsg(const char* format, ...) {
 }
 
 
+void Parser::ErrorMsg(const Error& error) {
+  Isolate::Current()->long_jump_base()->Jump(1, error);
+  UNREACHABLE();
+}
+
+
 void Parser::AppendErrorMsg(
       const Error& prev_error, intptr_t token_index, const char* format, ...) {
   va_list args;
@@ -5553,6 +5560,7 @@ AstNode* Parser::ParseBinaryExpr(int min_preced) {
         }
         right_operand = new TypeNode(type_pos, type);
         if (type.IsMalformed()) {
+          // Note that a type error is thrown even if the tested value is null.
           return ThrowTypeError(type_pos, type);
         }
       }
@@ -5854,12 +5862,25 @@ AstNode* Parser::ParseUnaryExpr() {
     if (!IsAssignableExpr(expr)) {
       ErrorMsg("expression is not assignable");
     }
-    // is_prefix.
-    AstNode* incr_op_node = expr->MakeIncrOpNode(op_pos, incr_op, true);
-    if (incr_op_node == NULL) {
-      Unimplemented("incr operation not implemented");
+    // TODO(srdjan): Implement transformation for all.
+    if (expr->IsLoadStaticFieldNode() || expr->IsStaticGetterNode()) {
+      Token::Kind binary_op =
+          (incr_op == Token::kINCR) ? Token::kADD : Token::kSUB;
+      BinaryOpNode* add = new BinaryOpNode(
+          op_pos,
+          binary_op,
+          expr,
+          new LiteralNode(op_pos, Smi::ZoneHandle(Smi::New(1))));
+      AstNode* store = expr->MakeAssignmentNode(add);
+      expr = store;
+    } else {
+      // is_prefix.
+      AstNode* incr_op_node = expr->MakeIncrOpNode(op_pos, incr_op, true);
+      if (incr_op_node == NULL) {
+        Unimplemented("incr operation not implemented");
+      }
+      expr = incr_op_node;
     }
-    expr = incr_op_node;
   } else {
     expr = ParsePostfixExpr();
   }
@@ -6324,12 +6345,33 @@ AstNode* Parser::ParsePostfixExpr() {
     }
     ConsumeToken();
     // Not prefix.
-    AstNode* incr_op_node =
-        postfix_expr->MakeIncrOpNode(postfix_expr_pos, incr_op, false);
-    if (incr_op_node == NULL) {
-      Unimplemented("incr op not implemented");
+    if (postfix_expr->IsLoadStaticFieldNode() ||
+        postfix_expr->IsStaticGetterNode()) {
+      LocalVariable* temp = CreateTempConstVariable(
+          postfix_expr_pos, postfix_expr->id(), "incoplix");
+      AstNode* save =
+          new StoreLocalNode(postfix_expr_pos, *temp, postfix_expr);
+      current_block_->statements->Add(save);
+      LoadLocalNode* load = new LoadLocalNode(postfix_expr_pos, *temp);
+      Token::Kind binary_op =
+          (incr_op == Token::kINCR) ? Token::kADD : Token::kSUB;
+      BinaryOpNode* add = new BinaryOpNode(
+          postfix_expr_pos,
+          binary_op,
+          load,
+          new LiteralNode(postfix_expr_pos, Smi::ZoneHandle(Smi::New(1))));
+      AstNode* store = postfix_expr->MakeAssignmentNode(add);
+      current_block_->statements->Add(store);
+      LoadLocalNode* load_res = new LoadLocalNode(postfix_expr_pos, *temp);
+      return load_res;
+    } else {
+      AstNode* incr_op_node =
+          postfix_expr->MakeIncrOpNode(postfix_expr_pos, incr_op, false);
+      if (incr_op_node == NULL) {
+        Unimplemented("incr op not implemented");
+      }
+      postfix_expr = incr_op_node;
     }
-    postfix_expr = incr_op_node;
   }
   return postfix_expr;
 }
@@ -6393,6 +6435,7 @@ void Parser::ResolveTypeFromClass(const Class& scope_class,
     } else if (finalization >= ClassFinalizer::kFinalize) {
       // The type is malformed.
       ClassFinalizer::FinalizeMalformedType(
+          Error::Handle(),  // No previous error.
           current_class(), parameterized_type, finalization,
           "type '%s' is not loaded",
           String::Handle(parameterized_type.Name()).ToCString());
@@ -6967,10 +7010,13 @@ AstNode* Parser::ParseListLiteral(intptr_t type_pos,
         // The expression needs to be type checked at runtime.
         // Eliminate the type check if it can be performed at compile time and
         // if it succeeds.
+        Error& malformed_error = Error::Handle();
         if (!element_type.IsInstantiated() ||
             !element->IsLiteralNode() ||
             !element->AsLiteralNode()->literal().
-                IsAssignableTo(element_type, TypeArguments::Handle())) {
+                IsAssignableTo(element_type,
+                               TypeArguments::Handle(),
+                               &malformed_error)) {
           element = new AssignableNode(element_pos,
                                        element,
                                        element_type,
@@ -6993,20 +7039,25 @@ AstNode* Parser::ParseListLiteral(intptr_t type_pos,
     Array& const_list =
         Array::ZoneHandle(Array::New(list->length(), Heap::kOld));
     const_list.SetTypeArguments(type_arguments);
-
+    Error& malformed_error = Error::Handle();
     for (int i = 0; i < list->length(); i++) {
       AstNode* elem = list->ElementAt(i);
       // Arguments have been evaluated to a literal value already.
       ASSERT(elem->IsLiteralNode());
       if (FLAG_enable_type_checks &&
           !element_type.IsDynamicType() &&
-          !elem->AsLiteralNode()->literal().
-              IsAssignableTo(element_type, TypeArguments::Handle())) {
-        ErrorMsg(elem->AsLiteralNode()->token_index(),
-                 "list literal element at index %d must be "
-                 "a constant of type '%s'",
-                 i,
-                 String::Handle(element_type.Name()).ToCString());
+          !elem->AsLiteralNode()->literal().IsAssignableTo(
+              element_type, TypeArguments::Handle(), &malformed_error)) {
+        // If the failure is due to a malformed type error, display it instead.
+        if (!malformed_error.IsNull()) {
+          ErrorMsg(malformed_error);
+        } else {
+          ErrorMsg(elem->AsLiteralNode()->token_index(),
+                   "list literal element at index %d must be "
+                   "a constant of type '%s'",
+                   i,
+                   String::Handle(element_type.Name()).ToCString());
+        }
       }
       const_list.SetAt(i, elem->AsLiteralNode()->literal());
     }
@@ -7144,10 +7195,11 @@ AstNode* Parser::ParseMapLiteral(intptr_t type_pos,
       // The expression needs to be type checked at runtime.
       // Eliminate the type check if it can be performed at compile time and
       // if it succeeds.
+      Error& malformed_error = Error::Handle();
       if (!value_type.IsInstantiated() ||
           !value->IsLiteralNode() ||
-          !value->AsLiteralNode()->literal().
-              IsAssignableTo(value_type, TypeArguments::Handle())) {
+          !value->AsLiteralNode()->literal().IsAssignableTo(
+              value_type, TypeArguments::Handle(), &malformed_error)) {
         value = new AssignableNode(value_pos,
                                    value,
                                    value_type,
@@ -7173,6 +7225,7 @@ AstNode* Parser::ParseMapLiteral(intptr_t type_pos,
     // First, create the canonicalized key-value pair array.
     Array& key_value_array =
         Array::ZoneHandle(Array::New(kv_pairs->length(), Heap::kOld));
+    Error& malformed_error = Error::Handle();
     for (int i = 0; i < kv_pairs->length(); i++) {
       AstNode* arg = kv_pairs->ElementAt(i);
       // Arguments have been evaluated to a literal value already.
@@ -7180,13 +7233,18 @@ AstNode* Parser::ParseMapLiteral(intptr_t type_pos,
       if (FLAG_enable_type_checks &&
           ((i % 2) == 1) &&  // Check values only, not keys.
           !value_type.IsDynamicType() &&
-          !arg->AsLiteralNode()->literal().
-              IsAssignableTo(value_type, TypeArguments::Handle())) {
-        ErrorMsg(arg->AsLiteralNode()->token_index(),
-                 "map literal value at index %d must be "
-                 "a constant of type '%s'",
-                 i >> 1,
-                 String::Handle(value_type.Name()).ToCString());
+          !arg->AsLiteralNode()->literal().IsAssignableTo(
+              value_type, TypeArguments::Handle(), &malformed_error)) {
+        // If the failure is due to a malformed type error, display it instead.
+        if (!malformed_error.IsNull()) {
+          ErrorMsg(malformed_error);
+        } else {
+          ErrorMsg(arg->AsLiteralNode()->token_index(),
+                   "map literal value at index %d must be "
+                   "a constant of type '%s'",
+                   i >> 1,
+                   String::Handle(value_type.Name()).ToCString());
+        }
       }
       key_value_array.SetAt(i, arg->AsLiteralNode()->literal());
     }
@@ -7298,6 +7356,9 @@ AstNode* Parser::ParseNewOperator() {
   }
   intptr_t type_pos = token_index_;
 
+  // TODO(regis): Bounds error should not result in a compile time error,
+  // but in a dynamic type error. Requesting kFinalizeWellFormed below is too
+  // strict. See co19 issue 96.
   const AbstractType& type = AbstractType::Handle(
       ParseType(ClassFinalizer::kFinalizeWellFormed));
   if (type.IsTypeParameter()) {
@@ -7375,9 +7436,11 @@ AstNode* Parser::ParseNewOperator() {
     // Only change the class of the constructor to the factory class if the
     // factory class implements the interface 'type'.
     const Class& factory_class = Class::Handle(type_class.FactoryClass());
+    Error& malformed_error = Error::Handle();
     if (factory_class.IsSubtypeOf(TypeArguments::Handle(),
                                   type_class,
-                                  TypeArguments::Handle())) {
+                                  TypeArguments::Handle(),
+                                  &malformed_error)) {
       // Class finalization verifies that the factory class has identical type
       // parameters as the interface.
       constructor_class_name = factory_class.Name();
@@ -7481,6 +7544,8 @@ AstNode* Parser::ParseNewOperator() {
       // Make sure that the instantiator is captured.
       CaptureReceiver();
     }
+    // TODO(regis): If the type argument vector is not instantiated, we need to
+    // verify in checked mode at runtime that it is within its declared bounds.
     new_object = new ConstructorCallNode(
         new_pos, type_arguments, constructor, arguments);
   }

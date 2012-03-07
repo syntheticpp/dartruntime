@@ -4,6 +4,7 @@
 
 #include "vm/flow_graph_builder.h"
 
+#include "vm/ast_printer.h"
 #include "vm/flags.h"
 #include "vm/intermediate_language.h"
 #include "vm/longjump.h"
@@ -14,6 +15,7 @@ namespace dart {
 
 DEFINE_FLAG(bool, print_flow_graph, false, "Print the IR flow graph.");
 DECLARE_FLAG(bool, enable_type_checks);
+DECLARE_FLAG(bool, print_ast);
 
 void EffectGraphVisitor::Append(const EffectGraphVisitor& other_fragment) {
   ASSERT(is_open());
@@ -217,6 +219,8 @@ void EffectGraphVisitor::VisitBinaryOpNode(BinaryOpNode* node) {
   // Operators "&&" and "||" cannot be overloaded therefore do not call
   // operator.
   if ((node->kind() == Token::kAND) || (node->kind() == Token::kOR)) {
+    // Implement short-circuit logic: do not evaluate right if evaluation
+    // of left is sufficient.
     Bailout("EffectGraphVisitor::VisitBinaryOpNode AND/OR");
   }
   ArgumentGraphVisitor for_left_value(owner(), temp_index());
@@ -313,12 +317,6 @@ void EffectGraphVisitor::VisitIncrOpInstanceFieldNode(
 }
 
 
-void EffectGraphVisitor::VisitIncrOpStaticFieldNode(
-    IncrOpStaticFieldNode* node) {
-  Bailout("EffectGraphVisitor::VisitIncrOpStaticFieldNode");
-}
-
-
 void EffectGraphVisitor::VisitIncrOpIndexedNode(IncrOpIndexedNode* node) {
   ASSERT((node->kind() == Token::kINCR) || (node->kind() == Token::kDECR));
   if (node->prefix()) {
@@ -329,21 +327,29 @@ void EffectGraphVisitor::VisitIncrOpIndexedNode(IncrOpIndexedNode* node) {
     //   t1 <- ... receiver ...
     //   t2 <- ... index ...
     const Smi& placeholder = Smi::ZoneHandle(Smi::New(0));
-    AddInstruction(new BindInstr(temp_index(), new ConstantVal(placeholder)));
+    const int placeholder_index = temp_index();
+    AddInstruction(new BindInstr(placeholder_index,
+                                 new ConstantVal(placeholder)));
+
     ArgumentGraphVisitor for_array(owner(), temp_index() + 1);
     node->array()->Visit(&for_array);
     Append(for_array);
+    ASSERT(for_array.value()->IsTemp());
+    const int array_index = for_array.value()->AsTemp()->index();
+
     ArgumentGraphVisitor for_index(owner(), for_array.temp_index());
     node->index()->Visit(&for_index);
     Append(for_index);
+    ASSERT(for_index.value()->IsTemp());
+    const int index_index = for_index.value()->AsTemp()->index();
 
     // Duplicate the receiver and index values, load the value.
-    //   t3 <- Copy(t1)
-    //   t4 <- Copy(t2)
+    //   t3 <- Pick(t1)
+    //   t4 <- Pick(t2)
     //   t3 <- InstanceCall([], t3, t4)
     int next_index = for_index.temp_index();
-    AddInstruction(new BindInstr(next_index, new CopyTempComp(-1)));
-    AddInstruction(new BindInstr(next_index + 1, new CopyTempComp(-1)));
+    AddInstruction(new PickTempInstr(next_index, array_index));
+    AddInstruction(new PickTempInstr(next_index + 1, index_index));
     ZoneGrowableArray<Value*>* arguments = new ZoneGrowableArray<Value*>(2);
     arguments->Add(new TempVal(next_index));
     arguments->Add(new TempVal(next_index + 1));
@@ -358,7 +364,7 @@ void EffectGraphVisitor::VisitIncrOpIndexedNode(IncrOpIndexedNode* node) {
     //   t0 := t3
     //   t4 <- #1
     //   t3 <- InstanceCall(op, t3, t4)
-    AddInstruction(new DoInstr(new SetTempComp(-3)));
+    AddInstruction(new TuckTempInstr(placeholder_index, next_index));
     const Smi& one = Smi::ZoneHandle(Smi::New(1));
     AddInstruction(new BindInstr(next_index + 1, new ConstantVal(one)));
     arguments = new ZoneGrowableArray<Value*>(2);
@@ -439,7 +445,26 @@ void EffectGraphVisitor::VisitWhileNode(WhileNode* node) {
 
 
 void EffectGraphVisitor::VisitDoWhileNode(DoWhileNode* node) {
-  Bailout("EffectGraphVisitor::VisitDoWhileNode");
+  EffectGraphVisitor for_body(owner(), temp_index());
+  node->body()->Visit(&for_body);
+  TestGraphVisitor for_test(owner(), temp_index());
+  node->condition()->Visit(&for_test);
+  ASSERT(is_open());
+
+  // Tie do-while loop (test is after the body).
+  JoinEntryInstr* join = new JoinEntryInstr();
+  AddInstruction(join);
+  join->SetSuccessor(for_body.entry());
+  Instruction* body_exit = for_body.is_empty() ? join : for_body.exit();
+
+  if (body_exit != NULL) {
+    TargetEntryInstr* target_entry = new TargetEntryInstr();
+    target_entry->SetSuccessor(for_test.entry());
+    body_exit->SetSuccessor(target_entry);
+  }
+
+  *for_test.true_successor_address() = join;
+  exit_ = *for_test.false_successor_address() = new TargetEntryInstr();
 }
 
 
@@ -806,16 +831,6 @@ void FlowGraphPrinter::VisitConstant(ConstantVal* val) {
 }
 
 
-void FlowGraphPrinter::VisitCopyTemp(CopyTempComp* comp) {
-  OS::Print("CopyTemp(%d)", comp->index());
-}
-
-
-void FlowGraphPrinter::VisitSetTemp(SetTempComp* comp) {
-  OS::Print("SetTemp(%d)", comp->index());
-}
-
-
 void FlowGraphPrinter::VisitAssertAssignable(AssertAssignableComp* comp) {
   OS::Print("AssertAssignable(");
   comp->value()->Accept(this);
@@ -933,6 +948,16 @@ void FlowGraphPrinter::VisitTargetEntry(TargetEntryInstr* instr) {
 }
 
 
+void FlowGraphPrinter::VisitPickTemp(PickTempInstr* instr) {
+  OS::Print("    t%d <- Pick(t%d)", instr->destination(), instr->source());
+}
+
+
+void FlowGraphPrinter::VisitTuckTemp(TuckTempInstr* instr) {
+  OS::Print("    t%d := t%d", instr->destination(), instr->source());
+}
+
+
 void FlowGraphPrinter::VisitDo(DoInstr* instr) {
   OS::Print("    ");
   instr->computation()->Accept(this);
@@ -960,6 +985,10 @@ void FlowGraphPrinter::VisitBranch(BranchInstr* instr) {
 
 
 void FlowGraphBuilder::BuildGraph() {
+  if (FLAG_print_ast) {
+    // Print the function ast before IL generation.
+    AstPrinter::PrintFunctionNodes(parsed_function_);
+  }
   EffectGraphVisitor for_effect(this, 0);
   for_effect.AddInstruction(new TargetEntryInstr());
   parsed_function().node_sequence()->Visit(&for_effect);
