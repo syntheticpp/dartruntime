@@ -59,20 +59,20 @@ class DartUtils {
   static int64_t GetIntegerValue(Dart_Handle value_obj);
   static const char* GetStringValue(Dart_Handle str_obj);
   static bool GetBooleanValue(Dart_Handle bool_obj);
-  static void SetIntegerInstanceField(Dart_Handle handle,
-                                      const char* name,
-                                      intptr_t val);
-  static intptr_t GetIntegerInstanceField(Dart_Handle handle,
-                                          const char* name);
-  static void SetStringInstanceField(Dart_Handle handle,
-                                     const char* name,
-                                     const char* val);
+  static void SetIntegerField(Dart_Handle handle,
+                              const char* name,
+                              intptr_t val);
+  static intptr_t GetIntegerField(Dart_Handle handle,
+                                  const char* name);
+  static void SetStringField(Dart_Handle handle,
+                             const char* name,
+                             const char* val);
   static bool IsDartSchemeURL(const char* url_name);
   static bool IsDartExtensionSchemeURL(const char* url_name);
   static bool IsDartIOLibURL(const char* url_name);
   static bool IsDartJsonLibURL(const char* url_name);
   static bool IsDartUriLibURL(const char* url_name);
-  static bool IsDartUtf8LibURL(const char* url_name);
+  static bool IsDartUtfLibURL(const char* url_name);
   static Dart_Handle CanonicalizeURL(CommandLineOptions* url_mapping,
                                      Dart_Handle library,
                                      const char* url_str);
@@ -94,7 +94,7 @@ class DartUtils {
   static const char* kIOLibURL;
   static const char* kJsonLibURL;
   static const char* kUriLibURL;
-  static const char* kUtf8LibURL;
+  static const char* kUtfLibURL;
   static const char* kIsolateLibURL;
 
   static const char* kIdFieldName;

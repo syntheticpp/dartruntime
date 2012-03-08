@@ -20,6 +20,33 @@ DECLARE_FLAG(bool, print_ast);
 DECLARE_FLAG(bool, print_scopes);
 DECLARE_FLAG(bool, trace_functions);
 
+FlowGraphCompiler::FlowGraphCompiler(
+    Assembler* assembler,
+    const ParsedFunction& parsed_function,
+    const GrowableArray<BlockEntryInstr*>* blocks)
+    : assembler_(assembler),
+      parsed_function_(parsed_function),
+      blocks_(blocks),
+      block_info_(blocks->length()),
+      current_block_(NULL),
+      pc_descriptors_list_(new CodeGenerator::DescriptorList()),
+      stack_local_count_(0) {
+  for (int i = 0; i < blocks->length(); ++i) {
+    block_info_.Add(new BlockInfo());
+  }
+}
+
+
+FlowGraphCompiler::~FlowGraphCompiler() {
+  // BlockInfos are zone-allocated, so their destructors are not called.
+  // Verify the labels explicitly here.
+  for (int i = 0; i < block_info_.length(); ++i) {
+    ASSERT(!block_info_[i]->label.IsLinked());
+    ASSERT(!block_info_[i]->label.HasNear());
+  }
+}
+
+
 void FlowGraphCompiler::Bailout(const char* reason) {
   const char* kFormat = "FlowGraphCompiler Bailout: %s %s.";
   const char* function_name = parsed_function_.function().ToCString();
@@ -149,7 +176,23 @@ void FlowGraphCompiler::VisitInstanceCall(InstanceCallComp* comp) {
 
 
 void FlowGraphCompiler::VisitStrictCompare(StrictCompareComp* comp) {
-  Bailout("StrictCompareComp");
+  const Bool& bool_true = Bool::ZoneHandle(Bool::True());
+  const Bool& bool_false = Bool::ZoneHandle(Bool::False());
+  LoadValue(comp->left());
+  __ movq(RDX, RAX);
+  LoadValue(comp->right());
+  __ cmpq(RAX, RDX);
+  Label load_true, done;
+  if (comp->kind() == Token::kEQ_STRICT) {
+    __ j(EQUAL, &load_true, Assembler::kNearJump);
+  } else {
+    __ j(NOT_EQUAL, &load_true, Assembler::kNearJump);
+  }
+  __ LoadObject(RAX, bool_false);
+  __ jmp(&done, Assembler::kNearJump);
+  __ Bind(&load_true);
+  __ LoadObject(RAX, bool_true);
+  __ Bind(&done);
 }
 
 
@@ -189,7 +232,20 @@ void FlowGraphCompiler::VisitStoreLocal(StoreLocalComp* comp) {
 
 
 void FlowGraphCompiler::VisitNativeCall(NativeCallComp* comp) {
-  Bailout("NativeCallComp");
+  // Push the result place holder initialized to NULL.
+  __ PushObject(Object::ZoneHandle());
+  // Pass a pointer to the first argument in RAX.
+  if (!comp->has_optional_parameters()) {
+    __ leaq(RAX, Address(RBP, (1 + comp->argument_count()) * kWordSize));
+  } else {
+    __ leaq(RAX, Address(RBP, -1 * kWordSize));
+  }
+  __ movq(RBX, Immediate(reinterpret_cast<uword>(comp->native_c_function())));
+  __ movq(R10, Immediate(comp->argument_count()));
+  GenerateCall(comp->token_index(),
+               &StubCode::CallNativeCFunctionLabel(),
+               PcDescriptors::kOther);
+  __ popq(RAX);
 }
 
 
@@ -260,13 +316,56 @@ void FlowGraphCompiler::VisitInstanceSetter(InstanceSetterComp* comp) {
 }
 
 
+void FlowGraphCompiler::VisitBooleanNegate(BooleanNegateComp* comp) {
+  const Bool& bool_true = Bool::ZoneHandle(Bool::True());
+  const Bool& bool_false = Bool::ZoneHandle(Bool::False());
+  Label done;
+  LoadValue(comp->value());
+  __ movq(RDX, RAX);
+  __ LoadObject(RAX, bool_true);
+  __ cmpq(RAX, RDX);
+  __ j(NOT_EQUAL, &done, Assembler::kNearJump);
+  __ LoadObject(RAX, bool_false);
+  __ Bind(&done);
+}
+
+
+void FlowGraphCompiler::VisitInstanceOf(InstanceOfComp* comp) {
+  Bailout("InstanceOf");
+}
+
+
+void FlowGraphCompiler::VisitBlocks(
+    const GrowableArray<BlockEntryInstr*>& blocks) {
+  for (intptr_t i = blocks.length() - 1; i >= 0; --i) {
+    // Compile the block entry.
+    current_block_ = blocks[i];
+    Instruction* instr = current_block()->Accept(this);
+    // Compile all successors until an exit, branch, or a block entry.
+    while ((instr != NULL) && !instr->IsBlockEntry()) {
+      instr = instr->Accept(this);
+    }
+
+    BlockEntryInstr* successor =
+        (instr == NULL) ? NULL : instr->AsBlockEntry();
+    if (successor != NULL) {
+      // Block ended with a "goto".  We can fall through if it is the
+      // next block in the list.  Otherwise, we need a jump.
+      if (i == 0 || (blocks[i - 1] != successor)) {
+        __ jmp(&block_info_[successor->block_number()]->label);
+      }
+    }
+  }
+}
+
+
 void FlowGraphCompiler::VisitJoinEntry(JoinEntryInstr* instr) {
-  Bailout("JoinEntryInstr");
+  __ Bind(&block_info_[instr->block_number()]->label);
 }
 
 
 void FlowGraphCompiler::VisitTargetEntry(TargetEntryInstr* instr) {
-  // Since we don't handle branching control flow yet, there is nothing to do.
+  __ Bind(&block_info_[instr->block_number()]->label);
 }
 
 
@@ -349,7 +448,23 @@ void FlowGraphCompiler::VisitReturn(ReturnInstr* instr) {
 
 
 void FlowGraphCompiler::VisitBranch(BranchInstr* instr) {
-  Bailout("BranchInstr");
+  // Determine if the true branch is fall through (!negated) or the false
+  // branch is.  They cannot both be backwards branches.
+  intptr_t index = blocks_->length() - current_block()->block_number() - 1;
+  ASSERT(index > 0);
+
+  bool negated = ((*blocks_)[index - 1] == instr->false_successor());
+  ASSERT(!negated == ((*blocks_)[index - 1] == instr->true_successor()));
+
+  LoadValue(instr->value());
+  __ LoadObject(RDX, Bool::ZoneHandle(Bool::True()));
+  __ cmpq(RAX, RDX);
+  if (negated) {
+    __ j(EQUAL, &block_info_[instr->true_successor()->block_number()]->label);
+  } else {
+    __ j(NOT_EQUAL,
+         &block_info_[instr->false_successor()->block_number()]->label);
+  }
 }
 
 
@@ -370,8 +485,6 @@ void FlowGraphCompiler::CompileGraph() {
                                scope,
                                &context_owner);
   set_stack_local_count(first_local_index - first_free_frame_index);
-
-  if (blocks_->length() != 1) Bailout("more than 1 basic block");
 
   // Specialized version of entry code from CodeGenerator::GenerateEntryCode.
   __ EnterFrame(stack_local_count() * kWordSize);

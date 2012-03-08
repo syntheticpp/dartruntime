@@ -27,12 +27,14 @@ class LocalVariable;
 // | StoreLocal <LocalVariable> <Value>
 // | StrictCompare <Token::kind> <Value> <Value>
 // | NativeCall <NativeBodyNode>
-// | StoreIndexed <StoreIndexedNode> <Value> <Value> <Value>
-// | InstanceSetter <InstanceSetterNode> <Value> <Value>
+// | StoreIndexed <Value> <Value> <Value>
+// | InstanceSetter <String> <Value> <Value>
 // | LoadInstanceField <LoadInstanceFieldNode> <Value>
 // | StoreInstanceField <StoreInstanceFieldNode> <Value> <Value>
 // | LoadStaticField <Field>
-// | StoreStaticField <StoreStaticFieldNode> <Value>
+// | StoreStaticField <Field> <Value>
+// | BooleanNegate <Value>
+// | InstanceOf <Value> <Type>
 //
 // <Value> ::=
 //   Temp <int>
@@ -61,7 +63,9 @@ class LocalVariable;
   M(LoadInstanceField, LoadInstanceFieldComp)                                  \
   M(StoreInstanceField, StoreInstanceFieldComp)                                \
   M(LoadStaticField, LoadStaticFieldComp)                                      \
-  M(StoreStaticField, StoreStaticFieldComp)
+  M(StoreStaticField, StoreStaticFieldComp)                                    \
+  M(BooleanNegate, BooleanNegateComp)                                          \
+  M(InstanceOf, InstanceOfComp)
 
 
 #define FORWARD_DECLARATION(ShortName, ClassName) class ClassName;
@@ -283,8 +287,20 @@ class NativeCallComp : public Computation {
 
   DECLARE_COMPUTATION(NativeCall)
 
+  intptr_t token_index() const { return ast_node_.token_index(); }
+
   const String& native_name() const {
     return ast_node_.native_c_function_name();
+  }
+
+  NativeFunction native_c_function() const {
+    return ast_node_.native_c_function();
+  }
+
+  intptr_t argument_count() const { return ast_node_.argument_count(); }
+
+  bool has_optional_parameters() const {
+    return ast_node_.has_optional_parameters();
   }
 
  private:
@@ -360,21 +376,21 @@ class LoadStaticFieldComp : public Computation {
 
 class StoreStaticFieldComp : public Computation {
  public:
-  StoreStaticFieldComp(StoreStaticFieldNode* ast_node, Value* value)
-      : ast_node_(*ast_node), value_(value) {
+  StoreStaticFieldComp(const Field& field, Value* value)
+      : field_(field),
+        value_(value) {
+    ASSERT(field.IsZoneHandle());
     ASSERT(value != NULL);
   }
 
   DECLARE_COMPUTATION(StoreStaticFieldComp);
 
-  intptr_t token_index() const { return ast_node_.token_index(); }
-  intptr_t node_id() const { return ast_node_.id(); }
-  const Field& field() const { return ast_node_.field(); }
+  const Field& field() const { return field_; }
   Value* value() const { return value_; }
 
  private:
-  const StoreStaticFieldNode& ast_node_;
-  Value* value_;
+  const Field& field_;
+  Value* const value_;
 
   DISALLOW_COPY_AND_ASSIGN(StoreStaticFieldComp);
 };
@@ -384,27 +400,28 @@ class StoreStaticFieldComp : public Computation {
 // semantics: the value operand is preserved before the call.
 class StoreIndexedComp : public Computation {
  public:
-  StoreIndexedComp(StoreIndexedNode* node,
+  StoreIndexedComp(intptr_t node_id,
+                   intptr_t token_index,
                    Value* array,
                    Value* index,
                    Value* value)
-      : ast_node_(*node),
+      : node_id_(node_id),
+        token_index_(token_index),
         array_(array),
         index_(index),
         value_(value) { }
 
   DECLARE_COMPUTATION(StoreIndexed)
 
-  // Accessors forwarded to the AST node.
-  intptr_t node_id() const { return ast_node_.id(); }
-  intptr_t token_index() const { return ast_node_.token_index(); }
-
+  intptr_t node_id() const { return node_id_; }
+  intptr_t token_index() const { return token_index_; }
   Value* array() const { return array_; }
   Value* index() const { return index_; }
   Value* value() const { return value_; }
 
  private:
-  const StoreIndexedNode& ast_node_;
+  intptr_t node_id_;
+  intptr_t token_index_;
   Value* array_;
   Value* index_;
   Value* value_;
@@ -417,29 +434,79 @@ class StoreIndexedComp : public Computation {
 // semantics: the value operand is preserved before the call.
 class InstanceSetterComp : public Computation {
  public:
-  InstanceSetterComp(InstanceSetterNode* node,
+  InstanceSetterComp(intptr_t node_id,
+                     intptr_t token_index,
+                     const String& field_name,
                      Value* receiver,
                      Value* value)
-      : ast_node_(*node),
+      : node_id_(node_id),
+        token_index_(token_index),
+        field_name_(field_name),
         receiver_(receiver),
         value_(value) { }
 
   DECLARE_COMPUTATION(InstanceSetter)
 
-  // Accessors forwarded to the AST node.
-  intptr_t node_id() const { return ast_node_.id(); }
-  intptr_t token_index() const { return ast_node_.token_index(); }
-  const String& field_name() const { return ast_node_.field_name(); }
-
+  intptr_t node_id() const { return node_id_; }
+  intptr_t token_index() const { return token_index_; }
+  const String& field_name() const { return field_name_; }
   Value* receiver() const { return receiver_; }
   Value* value() const { return value_; }
 
  private:
-  const InstanceSetterNode& ast_node_;
-  Value* receiver_;
-  Value* value_;
+  const intptr_t node_id_;
+  const intptr_t token_index_;
+  const String& field_name_;
+  Value* const receiver_;
+  Value* const value_;
 
   DISALLOW_COPY_AND_ASSIGN(InstanceSetterComp);
+};
+
+
+// Note overrideable, built-in: value? false : true.
+class BooleanNegateComp : public Computation {
+ public:
+  explicit BooleanNegateComp(Value* value) : value_(value) {}
+
+  DECLARE_COMPUTATION(BooleanNegateComp)
+
+  Value* value() const { return value_; }
+
+ private:
+  Value* value_;
+
+  DISALLOW_COPY_AND_ASSIGN(BooleanNegateComp);
+};
+
+
+class InstanceOfComp : public Computation {
+ public:
+  InstanceOfComp(intptr_t node_id,
+                 intptr_t token_index,
+                 Value* value,
+                 const AbstractType& type,
+                 bool negate_result)
+      : node_id_(node_id),
+        token_index_(token_index),
+        value_(value),
+        type_(type),
+        negate_result_(negate_result) {}
+
+  DECLARE_COMPUTATION(InstanceOfComp)
+
+  Value* value() const { return value_; }
+  bool negate_result() const { return negate_result_; }
+  const AbstractType& type() const { return type_; }
+
+ private:
+  const intptr_t node_id_;
+  const intptr_t token_index_;
+  Value* value_;
+  const AbstractType& type_;
+  const bool negate_result_;
+
+  DISALLOW_COPY_AND_ASSIGN(InstanceOfComp);
 };
 
 
@@ -490,6 +557,9 @@ class Instruction : public ZoneAllocated {
   Instruction() : mark_(false) { }
 
   virtual bool IsBlockEntry() const { return false; }
+  BlockEntryInstr* AsBlockEntry() {
+    return IsBlockEntry() ? reinterpret_cast<BlockEntryInstr*>(this) : NULL;
+  }
 
   // Visiting support.
   virtual Instruction* Accept(FlowGraphVisitor* visitor) = 0;
@@ -526,11 +596,6 @@ FOR_EACH_INSTRUCTION(INSTRUCTION_TYPE_CHECK)
 class BlockEntryInstr : public Instruction {
  public:
   virtual bool IsBlockEntry() const { return true; }
-
-  static BlockEntryInstr* cast(Instruction* instr) {
-    ASSERT(instr->IsBlockEntry());
-    return reinterpret_cast<BlockEntryInstr*>(instr);
-  }
 
   intptr_t block_number() const { return block_number_; }
   void set_block_number(intptr_t number) { block_number_ = number; }
