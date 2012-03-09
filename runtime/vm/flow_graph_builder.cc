@@ -339,7 +339,46 @@ void EffectGraphVisitor::VisitUnaryOpNode(UnaryOpNode* node) {
 
 
 void EffectGraphVisitor::VisitIncrOpLocalNode(IncrOpLocalNode* node) {
-  Bailout("EffectGraphVisitor::VisitIncrOpLocalNode");
+  ASSERT((node->kind() == Token::kINCR) || (node->kind() == Token::kDECR));
+  // In an effect context, treat postincrement as if it were preincrement
+  // because its value is not needed.
+
+  // 1. Load the value.
+  LoadLocalComp* load = new LoadLocalComp(node->local());
+  AddInstruction(new BindInstr(temp_index(), load));
+  // 2. Increment.
+  BuildIncrOpIncrement(node->kind(), node->id(), node->token_index(),
+                       temp_index() + 1);
+  // 3. Perform the store, resulting in the new value.
+  StoreLocalComp* store =
+      new StoreLocalComp(node->local(), new TempVal(temp_index()));
+  ReturnComputation(store);
+}
+
+
+void ValueGraphVisitor::VisitIncrOpLocalNode(IncrOpLocalNode* node) {
+  ASSERT((node->kind() == Token::kINCR) || (node->kind() == Token::kDECR));
+  if (node->prefix()) {
+    // Base class handles preincrement.
+    EffectGraphVisitor::VisitIncrOpLocalNode(node);
+    return;
+  }
+  // For postincrement, duplicate the original value to use one copy as the
+  // result.
+  //
+  // 1. Load the value.
+  LoadLocalComp* load = new LoadLocalComp(node->local());
+  AddInstruction(new BindInstr(temp_index(), load));
+  // 2. Duplicate it to increment.
+  AddInstruction(new PickTempInstr(temp_index() + 1, temp_index()));
+  // 3. Increment.
+  BuildIncrOpIncrement(node->kind(), node->id(), node->token_index(),
+                       temp_index() + 2);
+  // 4. Perform the store and return the original value.
+  StoreLocalComp* store =
+      new StoreLocalComp(node->local(), new TempVal(temp_index() + 1));
+  AddInstruction(new DoInstr(store));
+  ReturnValue(new TempVal(AllocateTempIndex()));
 }
 
 
@@ -538,7 +577,47 @@ void ValueGraphVisitor::VisitIncrOpIndexedNode(IncrOpIndexedNode* node) {
 
 
 void EffectGraphVisitor::VisitConditionalExprNode(ConditionalExprNode* node) {
-  Bailout("EffectGraphVisitor::VisitConditionalExprNode");
+  TestGraphVisitor for_test(owner(), temp_index());
+  node->condition()->Visit(&for_test);
+  ASSERT(for_test.can_be_true() && for_test.can_be_false());
+
+  // Translate the subexpressions for their effects.
+  EffectGraphVisitor for_true(owner(), temp_index());
+  node->true_expr()->Visit(&for_true);
+  EffectGraphVisitor for_false(owner(), temp_index());
+  node->false_expr()->Visit(&for_false);
+
+  Join(for_test, for_true, for_false);
+}
+
+
+void ValueGraphVisitor::VisitConditionalExprNode(ConditionalExprNode* node) {
+  TestGraphVisitor for_test(owner(), temp_index());
+  node->condition()->Visit(&for_test);
+  ASSERT(for_test.can_be_true() && for_test.can_be_false());
+
+  // Ensure that the value of the true/false subexpressions are named with
+  // the same temporary name.
+  ValueGraphVisitor for_true(owner(), temp_index());
+  node->true_expr()->Visit(&for_true);
+  ASSERT(for_true.is_open());
+  if (for_true.value()->IsTemp()) {
+    ASSERT(for_true.value()->AsTemp()->index() == temp_index());
+  } else {
+    for_true.AddInstruction(new BindInstr(temp_index(), for_true.value()));
+  }
+
+  ValueGraphVisitor for_false(owner(), temp_index());
+  node->false_expr()->Visit(&for_false);
+  ASSERT(for_false.is_open());
+  if (for_false.value()->IsTemp()) {
+    ASSERT(for_false.value()->AsTemp()->index() == temp_index());
+  } else {
+    for_false.AddInstruction(new BindInstr(temp_index(), for_false.value()));
+  }
+
+  Join(for_test, for_true, for_false);
+  ReturnValue(new TempVal(AllocateTempIndex()));
 }
 
 
@@ -610,7 +689,41 @@ void EffectGraphVisitor::VisitDoWhileNode(DoWhileNode* node) {
 
 
 void EffectGraphVisitor::VisitForNode(ForNode* node) {
-  Bailout("EffectGraphVisitor::VisitForNode");
+  EffectGraphVisitor for_initializer(owner(), temp_index());
+  node->initializer()->Visit(&for_initializer);
+  Append(for_initializer);
+  ASSERT(is_open());
+
+  EffectGraphVisitor for_body(owner(), temp_index());
+  node->body()->Visit(&for_body);
+  if (for_body.is_open()) {
+    EffectGraphVisitor for_increment(owner(), temp_index());
+    node->increment()->Visit(&for_increment);
+    for_body.Append(for_increment);
+  }
+
+  if (node->condition() != NULL) {
+    TestGraphVisitor for_test(owner(), temp_index());
+    node->condition()->Visit(&for_test);
+    TieLoop(for_test, for_body);
+    return;
+  }
+
+  // Degenerate cases.  An absent condition is implicitly true.  No
+  // normal exit from loop => no back edge.
+  if (!for_body.is_open()) {
+    Append(for_body);
+    return;
+  }
+  JoinEntryInstr* join = new JoinEntryInstr();
+  AddInstruction(join);
+  if (for_body.is_empty()) {
+    join->SetSuccessor(join);
+  } else {
+    join->SetSuccessor(for_body.entry());
+    for_body.exit()->SetSuccessor(join);
+  }
+  CloseFragment();
 }
 
 
@@ -625,7 +738,19 @@ void EffectGraphVisitor::VisitArgumentListNode(ArgumentListNode* node) {
 
 
 void EffectGraphVisitor::VisitArrayNode(ArrayNode* node) {
-  Bailout("EffectGraphVisitor::VisitArrayNode");
+  // Translate the array elements and collect their values.
+  ZoneGrowableArray<Value*>* values =
+      new ZoneGrowableArray<Value*>(node->length());
+  int index = temp_index();
+  for (int i = 0; i < node->length(); ++i) {
+    ValueGraphVisitor for_value(owner(), index);
+    node->ElementAt(i)->Visit(&for_value);
+    Append(for_value);
+    values->Add(for_value.value());
+    index = for_value.temp_index();
+  }
+  CreateArrayComp* create = new CreateArrayComp(node, values);
+  ReturnComputation(create);
 }
 
 
@@ -1097,6 +1222,17 @@ void FlowGraphPrinter::VisitInstanceOf(InstanceOfComp* comp) {
       String::Handle(comp->type().Name()).ToCString());
 }
 
+
+void FlowGraphPrinter::VisitCreateArray(CreateArrayComp* comp) {
+  OS::Print("CreateArray(");
+  for (int i = 0; i < comp->ElementCount(); ++i) {
+    if (i != 0) OS::Print(", ");
+    comp->ElementAt(i)->Accept(this);
+  }
+  OS::Print(")");
+}
+
+
 void FlowGraphPrinter::VisitJoinEntry(JoinEntryInstr* instr) {
   OS::Print("%2d: [join]", instr->block_number());
 }
@@ -1124,7 +1260,7 @@ void FlowGraphPrinter::VisitDo(DoInstr* instr) {
 
 
 void FlowGraphPrinter::VisitBind(BindInstr* instr) {
-  OS::Print("    t%d <-", instr->temp_index());
+  OS::Print("    t%d <- ", instr->temp_index());
   instr->computation()->Accept(this);
 }
 
