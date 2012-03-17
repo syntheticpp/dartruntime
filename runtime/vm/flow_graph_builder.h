@@ -20,14 +20,15 @@ class FlowGraphBuilder: public ValueObject {
  public:
   explicit FlowGraphBuilder(const ParsedFunction& parsed_function)
       : parsed_function_(parsed_function),
+        preorder_block_entries_(),
         postorder_block_entries_() { }
 
   void BuildGraph();
 
   const ParsedFunction& parsed_function() const { return parsed_function_; }
 
-  const GrowableArray<BlockEntryInstr*>* blocks() const {
-    return &postorder_block_entries_;
+  const GrowableArray<BlockEntryInstr*>& postorder_block_entries() const {
+    return postorder_block_entries_;
   }
 
   void Bailout(const char* reason);
@@ -37,6 +38,7 @@ class FlowGraphBuilder: public ValueObject {
 
  private:
   const ParsedFunction& parsed_function_;
+  GrowableArray<BlockEntryInstr*> preorder_block_entries_;
   GrowableArray<BlockEntryInstr*> postorder_block_entries_;
   intptr_t context_level_;
 };
@@ -240,11 +242,11 @@ class TestGraphVisitor : public ValueGraphVisitor {
   virtual void VisitLiteralNode(LiteralNode* node);
   virtual void VisitLoadLocalNode(LoadLocalNode* node);
 
-  BlockEntryInstr** true_successor_address() const {
+  TargetEntryInstr** true_successor_address() const {
     ASSERT(true_successor_address_ != NULL);
     return true_successor_address_;
   }
-  BlockEntryInstr** false_successor_address() const {
+  TargetEntryInstr** false_successor_address() const {
     ASSERT(false_successor_address_ != NULL);
     return false_successor_address_;
   }
@@ -262,8 +264,8 @@ class TestGraphVisitor : public ValueGraphVisitor {
   }
 
   // Output parameters.
-  BlockEntryInstr** true_successor_address_;
-  BlockEntryInstr** false_successor_address_;
+  TargetEntryInstr** true_successor_address_;
+  TargetEntryInstr** false_successor_address_;
 };
 
 }  // namespace dart
