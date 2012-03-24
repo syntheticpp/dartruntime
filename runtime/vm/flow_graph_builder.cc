@@ -166,6 +166,23 @@ void EffectGraphVisitor::VisitReturnNode(ReturnNode* node) {
     }
   }
 
+  intptr_t current_context_level = owner()->context_level();
+  ASSERT(current_context_level >= 0);
+  if (owner()->parsed_function().saved_context_var() != NULL) {
+    // CTX on entry was saved, but not linked as context parent.
+    LoadLocalComp* load_comp =
+        new LoadLocalComp(*owner()->parsed_function().saved_context_var(), 0);
+    AddInstruction(new BindInstr(temp_index(), load_comp));
+    TempVal* local_value = new TempVal(temp_index());
+    StoreContextComp* store_context = new StoreContextComp(local_value);
+    AddInstruction(new DoInstr(store_context));
+  } else {
+    while (current_context_level-- > 0) {
+      UnchainContext();
+    }
+  }
+
+
   AddInstruction(new ReturnInstr(return_value, node->token_index()));
   CloseFragment();
 }
@@ -387,14 +404,15 @@ void EffectGraphVisitor::VisitIncrOpLocalNode(IncrOpLocalNode* node) {
   // because its value is not needed.
 
   // 1. Load the value.
-  LoadLocalComp* load = new LoadLocalComp(node->local());
+  LoadLocalComp* load = new LoadLocalComp(node->local(),
+                                          owner()->context_level());
   AddInstruction(new BindInstr(temp_index(), load));
   // 2. Increment.
   BuildIncrOpIncrement(node->kind(), node->id(), node->token_index(),
                        temp_index() + 1);
   // 3. Perform the store, resulting in the new value.
-  StoreLocalComp* store =
-      new StoreLocalComp(node->local(), new TempVal(temp_index()));
+  StoreLocalComp* store = new StoreLocalComp(
+      node->local(), new TempVal(temp_index()), owner()->context_level());
   ReturnComputation(store);
 }
 
@@ -410,7 +428,8 @@ void ValueGraphVisitor::VisitIncrOpLocalNode(IncrOpLocalNode* node) {
   // result.
   //
   // 1. Load the value.
-  LoadLocalComp* load = new LoadLocalComp(node->local());
+  LoadLocalComp* load = new LoadLocalComp(node->local(),
+                                          owner()->context_level());
   AddInstruction(new BindInstr(temp_index(), load));
   // 2. Duplicate it to increment.
   AddInstruction(new PickTempInstr(temp_index() + 1, temp_index()));
@@ -418,8 +437,8 @@ void ValueGraphVisitor::VisitIncrOpLocalNode(IncrOpLocalNode* node) {
   BuildIncrOpIncrement(node->kind(), node->id(), node->token_index(),
                        temp_index() + 2);
   // 4. Perform the store and return the original value.
-  StoreLocalComp* store =
-      new StoreLocalComp(node->local(), new TempVal(temp_index() + 1));
+  StoreLocalComp* store = new StoreLocalComp(
+      node->local(), new TempVal(temp_index() + 1), owner()->context_level());
   AddInstruction(new DoInstr(store));
   ReturnValue(new TempVal(AllocateTempIndex()));
 }
@@ -800,9 +819,8 @@ void EffectGraphVisitor::VisitClosureNode(ClosureNode* node) {
 
   int next_index = temp_index();
   if (function.IsNonImplicitClosureFunction()) {
-    const int context_level = 0;  // Only because we don't handle nesting yet.
     const ContextScope& context_scope = ContextScope::ZoneHandle(
-        node->scope()->PreserveOuterScope(context_level));
+        node->scope()->PreserveOuterScope(owner()->context_level()));
     ASSERT(!function.HasCode());
     ASSERT(function.context_scope() == ContextScope::null());
     function.set_context_scope(context_scope);
@@ -1156,13 +1174,17 @@ void EffectGraphVisitor::VisitLoadLocalNode(LoadLocalNode* node) {
   return;
 }
 
+
 void ValueGraphVisitor::VisitLoadLocalNode(LoadLocalNode* node) {
-  LoadLocalComp* load = new LoadLocalComp(node->local());
+  LoadLocalComp* load = new LoadLocalComp(node->local(),
+                                          owner()->context_level());
   ReturnComputation(load);
 }
 
+
 void TestGraphVisitor::VisitLoadLocalNode(LoadLocalNode* node) {
-  LoadLocalComp* load = new LoadLocalComp(node->local());
+  LoadLocalComp* load = new LoadLocalComp(node->local(),
+                                          owner()->context_level());
   ReturnComputation(load);
 }
 
@@ -1182,7 +1204,8 @@ void EffectGraphVisitor::VisitStoreLocalNode(StoreLocalNode* node) {
     value = new TempVal(temp_index());
   }
 
-  StoreLocalComp* store = new StoreLocalComp(node->local(), value);
+  StoreLocalComp* store =
+      new StoreLocalComp(node->local(), value, owner()->context_level());
   ReturnComputation(store);
 }
 
@@ -1280,6 +1303,23 @@ void EffectGraphVisitor::VisitStoreIndexedNode(StoreIndexedNode* node) {
 }
 
 
+bool EffectGraphVisitor::MustSaveRestoreContext(SequenceNode* node) const {
+  return (node == owner()->parsed_function().node_sequence()) &&
+         (owner()->parsed_function().saved_context_var() != NULL);
+}
+
+
+void EffectGraphVisitor::UnchainContext() {
+  AddInstruction(new BindInstr(temp_index(), new CurrentContextComp()));
+  TempVal* temp_ctx = new TempVal(temp_index());
+  NativeLoadFieldComp* load = new NativeLoadFieldComp(
+      temp_ctx, Context::parent_offset());
+  AddInstruction(new BindInstr(temp_index(), load));
+  TempVal* parent_ctx = new TempVal(temp_index());
+  AddInstruction(new DoInstr(new StoreContextComp(parent_ctx)));
+}
+
+
 // <Statement> ::= Sequence { scope: LocalScope
 //                            nodes: <Statement>*
 //                            label: SourceLabel }
@@ -1291,9 +1331,76 @@ void EffectGraphVisitor::VisitSequenceNode(SequenceNode* node) {
   if (num_context_variables > 0) {
     // The loop local scope declares variables that are captured.
     // Allocate and chain a new context.
-    // Allocate context computation.
-    // Chain Context computation (maybe introduce a new variable).
-    Bailout("Sequence needs a context.  Gotta have a context.");
+    // Allocate context computation (uses current CTX)
+    AllocateContextComp* comp = new AllocateContextComp(node->token_index(),
+                                                        num_context_variables);
+    AddInstruction(new BindInstr(temp_index(), comp));
+    Value* allocated_context_value = new TempVal(temp_index());
+
+    // If this node_sequence is the body of the function being compiled, and if
+    // this function is not a closure, do not link the current context as the
+    // parent of the newly allocated context, as it is not accessible. Instead,
+    // save it in a pre-allocated variable and restore it on exit.
+    if (MustSaveRestoreContext(node)) {
+      AddInstruction(new BindInstr(temp_index() + 1, new CurrentContextComp()));
+      StoreLocalComp* store_local = new StoreLocalComp(
+          *owner()->parsed_function().saved_context_var(),
+          new TempVal(temp_index() + 1),
+          0);
+      AddInstruction(new DoInstr(store_local));
+      StoreContextComp* store_context =
+          new StoreContextComp(new ConstantVal(Object::ZoneHandle()));
+      AddInstruction(new DoInstr(store_context));
+    }
+
+    ChainContextComp* chain_context = new ChainContextComp(
+        allocated_context_value);
+    AddInstruction(new DoInstr(chain_context));
+    owner()->set_context_level(scope->context_level());
+
+    // If this node_sequence is the body of the function being compiled, copy
+    // the captured parameters from the frame into the context.
+    if (node == owner()->parsed_function().node_sequence()) {
+      ASSERT(scope->context_level() == 1);
+      const Immediate raw_null =
+          Immediate(reinterpret_cast<intptr_t>(Object::null()));
+      const Function& function = owner()->parsed_function().function();
+      const int num_params = function.NumberOfParameters();
+      int param_frame_index =
+          (num_params == function.num_fixed_parameters()) ? 1 + num_params : -1;
+      for (int pos = 0; pos < num_params; param_frame_index--, pos++) {
+        const LocalVariable& parameter = *scope->VariableAt(pos);
+        ASSERT(parameter.owner() == scope);
+        if (parameter.is_captured()) {
+          // Create a temporary local describing the original position.
+          const String& temp_name = String::ZoneHandle(String::Concat(
+              parameter.name(), String::Handle(String::NewSymbol("-orig"))));
+          LocalVariable* temp_local = new LocalVariable(
+              0,  // Token index.
+              temp_name,
+              Type::ZoneHandle(Type::DynamicType()));  // Type.
+          temp_local->set_index(param_frame_index);
+
+          // Copy parameter from local frame to current context.
+          LoadLocalComp* load_comp = new LoadLocalComp(
+              *temp_local, owner()->context_level());
+          AddInstruction(new BindInstr(temp_index(), load_comp));
+          StoreLocalComp* store_local = new StoreLocalComp(
+              parameter,
+              new TempVal(temp_index()),
+              owner()->context_level());
+          AddInstruction(new DoInstr(store_local));
+          // Write NULL to the source location to detect buggy accesses and
+          // allow GC of passed value if it gets overwritten by a new value in
+          // the function.
+          StoreLocalComp* clear_local = new StoreLocalComp(
+              *temp_local,
+              new ConstantVal(Object::ZoneHandle()),
+              owner()->context_level());
+          AddInstruction(new DoInstr(clear_local));
+        }
+      }
+    }
   }
 
   if (FLAG_enable_type_checks &&
@@ -1306,6 +1413,27 @@ void EffectGraphVisitor::VisitSequenceNode(SequenceNode* node) {
     EffectGraphVisitor for_effect(owner(), temp_index());
     node->NodeAt(i++)->Visit(&for_effect);
     Append(for_effect);
+  }
+
+  if (is_open()) {
+    if (MustSaveRestoreContext(node)) {
+      ASSERT(num_context_variables > 0);
+      LoadLocalComp* load_comp =
+          new LoadLocalComp(*owner()->parsed_function().saved_context_var(), 0);
+      AddInstruction(new BindInstr(temp_index(), load_comp));
+      TempVal* local_value = new TempVal(temp_index());
+      StoreContextComp* store_context = new StoreContextComp(local_value);
+      AddInstruction(new DoInstr(store_context));
+    } else if (num_context_variables > 0) {
+      UnchainContext();
+    }
+  }
+
+  // If this node sequence is labeled, a break out of the sequence will have
+  // taken care of unchaining the context.
+  if (node->label() != NULL) {
+    // TODO(srdjan): Check that the break label is bound? Is this a jump?
+    Bailout("VisitSequenceNode bind break and unchain CTX");
   }
   owner()->set_context_level(previous_context_level);
 }
@@ -1474,14 +1602,15 @@ void FlowGraphPrinter::VisitStaticCall(StaticCallComp* comp) {
 
 
 void FlowGraphPrinter::VisitLoadLocal(LoadLocalComp* comp) {
-  OS::Print("LoadLocal(%s)", comp->local().name().ToCString());
+  OS::Print("LoadLocal(%s lvl:%d)",
+      comp->local().name().ToCString(), comp->context_level());
 }
 
 
 void FlowGraphPrinter::VisitStoreLocal(StoreLocalComp* comp) {
   OS::Print("StoreLocal(%s, ", comp->local().name().ToCString());
   comp->value()->Accept(this);
-  OS::Print(")");
+  OS::Print(", lvl: %d)", comp->context_level());
 }
 
 
@@ -1622,6 +1751,25 @@ void FlowGraphPrinter::VisitExtractConstructorInstantiator(
 }
 
 
+void FlowGraphPrinter::VisitAllocateContext(AllocateContextComp* comp) {
+  OS::Print("AllocateContext(%d)", comp->num_context_variables());
+}
+
+
+void FlowGraphPrinter::VisitChainContext(ChainContextComp* comp) {
+  OS::Print("ChainContext(");
+  comp->context_value()->Accept(this);
+  OS::Print(")");
+}
+
+
+void FlowGraphPrinter::VisitStoreContext(StoreContextComp* comp) {
+  OS::Print("StoreContext(");
+  comp->value()->Accept(this);
+  OS::Print(")");
+}
+
+
 void FlowGraphPrinter::VisitJoinEntry(JoinEntryInstr* instr) {
   OS::Print("%2d: [join]", reverse_index(instr->postorder_number()));
 }
@@ -1699,11 +1847,12 @@ void FlowGraphBuilder::BuildGraph() {
   if (for_effect.entry() != NULL) {
     // Perform a depth-first traversal of the graph to build preorder and
     // postorder block orders.
-    GrowableArray<BlockEntryInstr*> parent;
+    GrowableArray<intptr_t> parent;
     for_effect.entry()->DiscoverBlocks(NULL,  // Entry block predecessor.
                                        &preorder_block_entries_,
                                        &postorder_block_entries_,
                                        &parent);
+    ComputeDominators(&preorder_block_entries_, &parent);
   }
   if (FLAG_print_flow_graph) {
     intptr_t length = postorder_block_entries_.length();
@@ -1713,6 +1862,93 @@ void FlowGraphBuilder::BuildGraph() {
     }
     FlowGraphPrinter printer(function, reverse_postorder);
     printer.VisitBlocks();
+  }
+}
+
+
+void FlowGraphBuilder::ComputeDominators(
+    GrowableArray<BlockEntryInstr*>* preorder,
+    GrowableArray<intptr_t>* parent) {
+  // Use the SEMI-NCA algorithm to compute dominators.  This is a two-pass
+  // version of the Lengauer-Tarjan algorithm (LT is normally three passes)
+  // that eliminates a pass by using nearest-common ancestor (NCA) to
+  // compute immediate dominators from semidominators.  It also removes a
+  // level of indirection in the link-eval forest data structure.
+  //
+  // The algorithm is described in Georgiadis, Tarjan, and Werneck's
+  // "Finding Dominators in Practice".
+  // See http://www.cs.princeton.edu/~rwerneck/dominators/ .
+
+  // All arrays are maps between preorder basic-block numbers.
+  intptr_t size = parent->length();
+  GrowableArray<intptr_t> idom(size);  // Immediate dominator.
+  GrowableArray<intptr_t> semi(size);  // Semidominator.
+  GrowableArray<intptr_t> label(size);  // Label for link-eval forest.
+
+  // 1. First pass: compute semidominators as in Lengauer-Tarjan.
+  // Semidominators are computed from a depth-first spanning tree and are an
+  // approximation of immediate dominators.
+
+  // Use a link-eval data structure with path compression.  Implement path
+  // compression in place by mutating the parent array.  Each block has a
+  // label, which is the minimum block number on the compressed path.
+
+  // Initialize idom, semi, and label.
+  for (intptr_t i = 0; i < size; ++i) {
+    idom.Add((*parent)[i]);
+    semi.Add(i);
+    label.Add(i);
+  }
+
+  // Loop over the blocks in reverse preorder (not including the graph
+  // entry).
+  for (intptr_t block_index = size - 1; block_index >= 1; --block_index) {
+    // Loop over the predecessors.
+    BlockEntryInstr* block = (*preorder)[block_index];
+    for (intptr_t i = 0; i < block->PredecessorCount(); ++i) {
+      BlockEntryInstr* pred = block->PredecessorAt(i);
+      ASSERT(pred != NULL);
+
+      // Look for the semidominator by ascending the semidominator path
+      // starting from pred.
+      intptr_t pred_index = pred->preorder_number();
+      intptr_t best = pred_index;
+      if (pred_index > block_index) {
+        CompressPath(block_index, pred_index, parent, &label);
+        best = label[pred_index];
+      }
+
+      // Update the semidominator if we've found a better one.
+      semi[block_index] = Utils::Minimum(semi[block_index], semi[best]);
+    }
+
+    // Now use label for the semidominator.
+    label[block_index] = semi[block_index];
+  }
+
+  // 2. Compute the immediate dominators as the nearest common ancestor of
+  // spanning tree parent and semidominator, for all nodes except the entry.
+  for (intptr_t block_index = 1; block_index < size; ++block_index) {
+    intptr_t dom_index = idom[block_index];
+    while (dom_index > semi[block_index]) {
+      dom_index = idom[dom_index];
+    }
+    idom[block_index] = dom_index;
+    (*preorder)[block_index]->set_dominator((*preorder)[dom_index]);
+  }
+}
+
+
+void FlowGraphBuilder::CompressPath(intptr_t start_index,
+                                    intptr_t current_index,
+                                    GrowableArray<intptr_t>* parent,
+                                    GrowableArray<intptr_t>* label) {
+  intptr_t next_index = (*parent)[current_index];
+  if (next_index > start_index) {
+    CompressPath(start_index, next_index, parent, label);
+    (*label)[current_index] =
+        Utils::Minimum((*label)[current_index], (*label)[next_index]);
+    (*parent)[current_index] = (*parent)[next_index];
   }
 }
 

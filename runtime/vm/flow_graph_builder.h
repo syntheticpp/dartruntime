@@ -21,7 +21,8 @@ class FlowGraphBuilder: public ValueObject {
   explicit FlowGraphBuilder(const ParsedFunction& parsed_function)
       : parsed_function_(parsed_function),
         preorder_block_entries_(),
-        postorder_block_entries_() { }
+        postorder_block_entries_(),
+        context_level_(0) { }
 
   void BuildGraph();
 
@@ -37,6 +38,13 @@ class FlowGraphBuilder: public ValueObject {
   intptr_t context_level() const { return context_level_; }
 
  private:
+  void ComputeDominators(GrowableArray<BlockEntryInstr*>* preorder,
+                         GrowableArray<intptr_t>* parent);
+  void CompressPath(intptr_t start_index,
+                    intptr_t current_index,
+                    GrowableArray<intptr_t>* parent,
+                    GrowableArray<intptr_t>* label);
+
   const ParsedFunction& parsed_function_;
   GrowableArray<BlockEntryInstr*> preorder_block_entries_;
   GrowableArray<BlockEntryInstr*> postorder_block_entries_;
@@ -137,6 +145,11 @@ class EffectGraphVisitor : public AstNodeVisitor {
   // Returns the value of the type arguments of the instantiator.
   Value* BuildInstantiatorTypeArguments(intptr_t token_index,
                                         intptr_t start_index);
+
+  bool MustSaveRestoreContext(SequenceNode* node) const;
+
+  // Moves parent context into the context register.
+  void UnchainContext();
 
   void CloseFragment() { exit_ = NULL; }
   intptr_t AllocateTempIndex() { return temp_index_++; }

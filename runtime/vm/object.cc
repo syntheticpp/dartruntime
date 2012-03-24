@@ -5432,6 +5432,11 @@ void PcDescriptors::Verify(bool check_ids) const {
 }
 
 
+void Stackmap::SetCode(const Code& code) const {
+  StorePointer(&raw_ptr()->code_, code.raw());
+}
+
+
 // Return the bit offset of the highest bit set.
 intptr_t Stackmap::Maximum() const {
   intptr_t bound = SizeInBits();
@@ -5522,12 +5527,12 @@ const char* Stackmap::ToCString() const {
   if (IsNull()) {
     return "{null}";
   } else {
-    intptr_t index = OS::SNPrint(NULL, 0, "0x%lx { ", pc());
+    intptr_t index = OS::SNPrint(NULL, 0, "0x%lx { ", PC());
     intptr_t alloc_size = index + ((Maximum() + 1) * 2) + 2;  // "{ 1 0 .... }".
     Isolate* isolate = Isolate::Current();
     char* chars = reinterpret_cast<char*>(
         isolate->current_zone()->Allocate(alloc_size));
-    index = OS::SNPrint(chars, alloc_size, "0x%lx { ", pc());
+    index = OS::SNPrint(chars, alloc_size, "0x%lx { ", PC());
     for (intptr_t i = 0; i <= Maximum(); i++) {
       index += OS::SNPrint((chars + index),
                            (alloc_size - index),
@@ -5684,6 +5689,11 @@ const char* ExceptionHandlers::ToCString() const {
                          HandlerPC(i));
   }
   return buffer;
+}
+
+
+void Code::set_stackmaps(const Array& maps) const {
+  StorePointer(&raw_ptr()->stackmaps_, maps.raw());
 }
 
 
@@ -6913,8 +6923,8 @@ RawBigint* Bigint::Allocate(intptr_t length, Heap::Space space) {
     RawObject* raw = Object::Allocate(cls, Bigint::InstanceSize(length), space);
     NoGCScope no_gc;
     result ^= raw;
-    result.raw_ptr()->allocated_length_ = length;
-    result.raw_ptr()->signed_length_ = length;
+    result.raw_ptr()->allocated_length_ = length;  // Chunk length allocated.
+    result.raw_ptr()->signed_length_ = length;  // Chunk length in use.
   }
   return result.raw();
 }

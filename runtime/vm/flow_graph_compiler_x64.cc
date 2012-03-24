@@ -8,6 +8,7 @@
 #include "vm/flow_graph_compiler.h"
 
 #include "vm/ast_printer.h"
+#include "vm/code_descriptors.h"
 #include "vm/code_generator.h"
 #include "vm/disassembler.h"
 #include "vm/longjump.h"
@@ -30,7 +31,7 @@ FlowGraphCompiler::FlowGraphCompiler(
       parsed_function_(parsed_function),
       block_info_(block_order.length()),
       current_block_(NULL),
-      pc_descriptors_list_(new CodeGenerator::DescriptorList()) {
+      pc_descriptors_list_(new DescriptorList()) {
   for (int i = 0; i < block_order.length(); ++i) {
     block_info_.Add(new BlockInfo());
   }
@@ -191,6 +192,11 @@ void FlowGraphCompiler::VisitCurrentContext(CurrentContextComp* comp) {
 }
 
 
+void FlowGraphCompiler::VisitStoreContext(StoreContextComp* comp) {
+  LoadValue(CTX, comp->value());
+}
+
+
 void FlowGraphCompiler::VisitClosureCall(ClosureCallComp* comp) {
   ASSERT(comp->context()->IsTemp());
   ASSERT(VerifyCallComputation(comp));
@@ -253,18 +259,46 @@ void FlowGraphCompiler::VisitStaticCall(StaticCallComp* comp) {
 
 void FlowGraphCompiler::VisitLoadLocal(LoadLocalComp* comp) {
   if (comp->local().is_captured()) {
-    Bailout("load of context variable");
+    // The variable lives in the context.
+    intptr_t delta = comp->context_level() -
+                     comp->local().owner()->context_level();
+    ASSERT(delta >= 0);
+    Register base = CTX;
+    while (delta-- > 0) {
+      __ movq(RAX, FieldAddress(base, Context::parent_offset()));
+      base = RAX;
+    }
+    __ movq(RAX,
+            FieldAddress(base,
+                         Context::variable_offset(comp->local().index())));
+  } else {
+    // The variable lives in the current stack frame.
+    __ movq(RAX, Address(RBP, comp->local().index() * kWordSize));
   }
-  __ movq(RAX, Address(RBP, comp->local().index() * kWordSize));
 }
 
 
 void FlowGraphCompiler::VisitStoreLocal(StoreLocalComp* comp) {
-  if (comp->local().is_captured()) {
-    Bailout("store to context variable");
-  }
   LoadValue(RAX, comp->value());
-  __ movq(Address(RBP, comp->local().index() * kWordSize), RAX);
+  if (comp->local().is_captured()) {
+    // The variable lives in the context.
+    Register scratch = R10;
+    intptr_t delta = comp->context_level() -
+                     comp->local().owner()->context_level();
+    ASSERT(delta >= 0);
+    Register base = CTX;
+    while (delta-- > 0) {
+      __ movq(scratch, FieldAddress(base, Context::parent_offset()));
+      base = scratch;
+    }
+    __ StoreIntoObject(
+        base,
+        FieldAddress(base, Context::variable_offset(comp->local().index())),
+        RAX);
+  } else {
+    // The variable lives in the current stack frame.
+    __ movq(Address(RBP, comp->local().index() * kWordSize), RAX);
+  }
 }
 
 
@@ -747,6 +781,25 @@ void FlowGraphCompiler::VisitExtractConstructorInstantiator(
   // In the non-factory case, we rely on the allocation stub to
   // instantiate the type arguments.
   // RAX: instantiator or null.
+}
+
+
+void FlowGraphCompiler::VisitAllocateContext(AllocateContextComp* comp) {
+  __ movq(R10, Immediate(comp->num_context_variables()));
+  const ExternalLabel label("alloc_context",
+                            StubCode::AllocateContextEntryPoint());
+  GenerateCall(comp->token_index(), &label, PcDescriptors::kOther);
+}
+
+
+void FlowGraphCompiler::VisitChainContext(ChainContextComp* comp) {
+  __ popq(RAX);
+  // Chain the new context in RAX to its parent in CTX.
+  __ StoreIntoObject(RAX,
+                     FieldAddress(RAX, Context::parent_offset()),
+                     CTX);
+  // Set new context as current context.
+  __ movq(CTX, RAX);
 }
 
 

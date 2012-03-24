@@ -653,6 +653,7 @@ class RawCode : public RawObject {
   RawFunction* function_;
   RawExceptionHandlers* exception_handlers_;
   RawPcDescriptors* pc_descriptors_;
+  RawArray* stackmaps_;
   RawLocalVarDescriptors* var_descriptors_;
   RawObject** to() {
     return reinterpret_cast<RawObject**>(&ptr()->var_descriptors_);
@@ -895,14 +896,14 @@ class RawMint : public RawInteger {
 class RawBigint : public RawInteger {
   RAW_HEAP_OBJECT_IMPLEMENTATION(Bigint);
 
-  // Actual length at the time of allocation (later we may clamp the
-  // operational length but we need to maintain a consistent object
-  // length so that the object can be traversed during GC).
+  // Actual length in chunks at the time of allocation (later we may
+  // clamp the operational length but we need to maintain a consistent
+  // object length so that the object can be traversed during GC).
   intptr_t allocated_length_;
 
-  // Operation length of the bigint object, clamping can cause this length
-  // to be reduced. If the signed_length_ is negative then the number
-  // is negative.
+  // Operational length in chunks of the bigint object, clamping can
+  // cause this length to be reduced. If the signed_length_ is
+  // negative then the number is negative.
   intptr_t signed_length_;
 
   // A sequence of Chunks (typedef in Bignum) representing bignum digits.
