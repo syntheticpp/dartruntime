@@ -14,8 +14,7 @@
 // should return the interface type.
 DOMWindow get window() native "return window;";
 
-// TODO(vsm): Revert to Dart method when 508 is fixed.
-HTMLDocument get document() native "return window.document;";
+HTMLDocument get document() native "return document;";
 
 class _AbstractWorkerJs extends _EventTargetJs implements AbstractWorker native "*AbstractWorker" {
 
@@ -612,18 +611,18 @@ class _CanvasPixelArrayJs extends _DOMTypeJs implements CanvasPixelArray native 
 
   int last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<int> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<int> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [int initialValue]) {
+  void insertRange(int start, int rangeLength, [int initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<int> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <int>[]);
+  List<int> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <int>[]);
 
   // -- end List<int> mixins.
 }
@@ -2322,14 +2321,6 @@ class _FileWriterSyncJs extends _DOMTypeJs implements FileWriterSync native "*Fi
 
 class _Float32ArrayJs extends _ArrayBufferViewJs implements Float32Array, List<num> native "*Float32Array" {
 
-  factory Float32Array(int length) =>  _construct_Float32Array(length);
-
-  factory Float32Array.fromList(List<num> list) => _construct_Float32Array(list);
-
-  factory Float32Array.fromBuffer(ArrayBuffer buffer) => _construct_Float32Array(buffer);
-
-  static _construct_Float32Array(arg) native 'return new Float32Array(arg);';
-
   static final int BYTES_PER_ELEMENT = 4;
 
   final int length;
@@ -2390,37 +2381,27 @@ class _Float32ArrayJs extends _ArrayBufferViewJs implements Float32Array, List<n
 
   num last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<num> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<num> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [num initialValue]) {
+  void insertRange(int start, int rangeLength, [num initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<num> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <num>[]);
+  List<num> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <num>[]);
 
   // -- end List<num> mixins.
 
-  void setElements(Object array, [int offset = null]) native '''
-if (offset == null) return this.set(array);
-return this.set(array, offset);''';
+  void setElements(Object array, [int offset = null]) native 'set';
 
   _Float32ArrayJs subarray(int start, [int end = null]) native;
 }
 
 class _Float64ArrayJs extends _ArrayBufferViewJs implements Float64Array, List<num> native "*Float64Array" {
-
-  factory Float64Array(int length) =>  _construct_Float64Array(length);
-
-  factory Float64Array.fromList(List<num> list) => _construct_Float64Array(list);
-
-  factory Float64Array.fromBuffer(ArrayBuffer buffer) => _construct_Float64Array(buffer);
-
-  static _construct_Float64Array(arg) native 'return new Float64Array(arg);';
 
   static final int BYTES_PER_ELEMENT = 8;
 
@@ -2482,24 +2463,22 @@ class _Float64ArrayJs extends _ArrayBufferViewJs implements Float64Array, List<n
 
   num last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<num> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<num> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [num initialValue]) {
+  void insertRange(int start, int rangeLength, [num initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<num> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <num>[]);
+  List<num> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <num>[]);
 
   // -- end List<num> mixins.
 
-  void setElements(Object array, [int offset = null]) native '''
-if (offset == null) return this.set(array);
-return this.set(array, offset);''';
+  void setElements(Object array, [int offset = null]) native 'set';
 
   _Float64ArrayJs subarray(int start, [int end = null]) native;
 }
@@ -2783,18 +2762,18 @@ class _HTMLCollectionJs extends _DOMTypeJs implements HTMLCollection native "*HT
 
   Node last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<Node> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<Node> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [Node initialValue]) {
+  void insertRange(int start, int rangeLength, [Node initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<Node> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <Node>[]);
+  List<Node> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <Node>[]);
 
   // -- end List<Node> mixins.
 
@@ -4108,9 +4087,9 @@ class _IDBCursorJs extends _DOMTypeJs implements IDBCursor native "*IDBCursor" {
   final _IDBAnyJs source;
 
   void continueFunction([_IDBKeyJs key = null]) native '''
-if (key == null) return this['continue']();
-return this['continue'](key);
-''';
+        if (key == null) return this['continue']();
+        return this['continue'](key);
+      ''';
 
   _IDBRequestJs delete() native;
 
@@ -4222,7 +4201,7 @@ class _IDBIndexJs extends _DOMTypeJs implements IDBIndex native "*IDBIndex" {
 
   _IDBRequestJs count([var key_OR_range = null]) native;
 
-  _IDBRequestJs getObject(_IDBKeyJs key) native '''return this.get(key);''';
+  _IDBRequestJs getObject(_IDBKeyJs key) native 'get';
 
   _IDBRequestJs getKey(_IDBKeyJs key) native;
 
@@ -4275,7 +4254,7 @@ class _IDBObjectStoreJs extends _DOMTypeJs implements IDBObjectStore native "*ID
 
   void deleteIndex(String name) native;
 
-  _IDBRequestJs getObject(_IDBKeyJs key) native '''return this.get(key);''';
+  _IDBRequestJs getObject(_IDBKeyJs key) native 'get';
 
   _IDBIndexJs index(String name) native;
 
@@ -4370,14 +4349,6 @@ class _ImageDataJs extends _DOMTypeJs implements ImageData native "*ImageData" {
 
 class _Int16ArrayJs extends _ArrayBufferViewJs implements Int16Array, List<int> native "*Int16Array" {
 
-  factory Int16Array(int length) =>  _construct_Int16Array(length);
-
-  factory Int16Array.fromList(List<int> list) => _construct_Int16Array(list);
-
-  factory Int16Array.fromBuffer(ArrayBuffer buffer) => _construct_Int16Array(buffer);
-
-  static _construct_Int16Array(arg) native 'return new Int16Array(arg);';
-
   static final int BYTES_PER_ELEMENT = 2;
 
   final int length;
@@ -4438,37 +4409,27 @@ class _Int16ArrayJs extends _ArrayBufferViewJs implements Int16Array, List<int> 
 
   int last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<int> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<int> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [int initialValue]) {
+  void insertRange(int start, int rangeLength, [int initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<int> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <int>[]);
+  List<int> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <int>[]);
 
   // -- end List<int> mixins.
 
-  void setElements(Object array, [int offset = null]) native '''
-if (offset == null) return this.set(array);
-return this.set(array, offset);''';
+  void setElements(Object array, [int offset = null]) native 'set';
 
   _Int16ArrayJs subarray(int start, [int end = null]) native;
 }
 
 class _Int32ArrayJs extends _ArrayBufferViewJs implements Int32Array, List<int> native "*Int32Array" {
-
-  factory Int32Array(int length) =>  _construct_Int32Array(length);
-
-  factory Int32Array.fromList(List<int> list) => _construct_Int32Array(list);
-
-  factory Int32Array.fromBuffer(ArrayBuffer buffer) => _construct_Int32Array(buffer);
-
-  static _construct_Int32Array(arg) native 'return new Int32Array(arg);';
 
   static final int BYTES_PER_ELEMENT = 4;
 
@@ -4530,37 +4491,27 @@ class _Int32ArrayJs extends _ArrayBufferViewJs implements Int32Array, List<int> 
 
   int last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<int> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<int> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [int initialValue]) {
+  void insertRange(int start, int rangeLength, [int initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<int> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <int>[]);
+  List<int> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <int>[]);
 
   // -- end List<int> mixins.
 
-  void setElements(Object array, [int offset = null]) native '''
-if (offset == null) return this.set(array);
-return this.set(array, offset);''';
+  void setElements(Object array, [int offset = null]) native 'set';
 
   _Int32ArrayJs subarray(int start, [int end = null]) native;
 }
 
 class _Int8ArrayJs extends _ArrayBufferViewJs implements Int8Array, List<int> native "*Int8Array" {
-
-  factory Int8Array(int length) =>  _construct_Int8Array(length);
-
-  factory Int8Array.fromList(List<int> list) => _construct_Int8Array(list);
-
-  factory Int8Array.fromBuffer(ArrayBuffer buffer) => _construct_Int8Array(buffer);
-
-  static _construct_Int8Array(arg) native 'return new Int8Array(arg);';
 
   static final int BYTES_PER_ELEMENT = 1;
 
@@ -4622,24 +4573,22 @@ class _Int8ArrayJs extends _ArrayBufferViewJs implements Int8Array, List<int> na
 
   int last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<int> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<int> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [int initialValue]) {
+  void insertRange(int start, int rangeLength, [int initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<int> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <int>[]);
+  List<int> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <int>[]);
 
   // -- end List<int> mixins.
 
-  void setElements(Object array, [int offset = null]) native '''
-if (offset == null) return this.set(array);
-return this.set(array, offset);''';
+  void setElements(Object array, [int offset = null]) native 'set';
 
   _Int8ArrayJs subarray(int start, [int end = null]) native;
 }
@@ -4859,18 +4808,18 @@ class _MediaListJs extends _DOMTypeJs implements MediaList native "*MediaList" {
 
   String last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<String> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<String> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [String initialValue]) {
+  void insertRange(int start, int rangeLength, [String initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<String> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <String>[]);
+  List<String> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <String>[]);
 
   // -- end List<String> mixins.
 
@@ -5127,18 +5076,18 @@ class _NamedNodeMapJs extends _DOMTypeJs implements NamedNodeMap native "*NamedN
 
   Node last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<Node> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<Node> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [Node initialValue]) {
+  void insertRange(int start, int rangeLength, [Node initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<Node> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <Node>[]);
+  List<Node> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <Node>[]);
 
   // -- end List<Node> mixins.
 
@@ -5436,18 +5385,18 @@ class _NodeListJs extends _DOMTypeJs implements NodeList native "*NodeList" {
 
   Node last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<Node> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<Node> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [Node initialValue]) {
+  void insertRange(int start, int rangeLength, [Node initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<Node> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <Node>[]);
+  List<Node> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <Node>[]);
 
   // -- end List<Node> mixins.
 
@@ -9603,18 +9552,18 @@ class _StyleSheetListJs extends _DOMTypeJs implements StyleSheetList native "*St
 
   StyleSheet last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<StyleSheet> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<StyleSheet> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [StyleSheet initialValue]) {
+  void insertRange(int start, int rangeLength, [StyleSheet initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<StyleSheet> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <StyleSheet>[]);
+  List<StyleSheet> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <StyleSheet>[]);
 
   // -- end List<StyleSheet> mixins.
 
@@ -9855,18 +9804,18 @@ class _TouchListJs extends _DOMTypeJs implements TouchList native "*TouchList" {
 
   Touch last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<Touch> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<Touch> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [Touch initialValue]) {
+  void insertRange(int start, int rangeLength, [Touch initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<Touch> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <Touch>[]);
+  List<Touch> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <Touch>[]);
 
   // -- end List<Touch> mixins.
 
@@ -9930,14 +9879,6 @@ class _UIEventJs extends _EventJs implements UIEvent native "*UIEvent" {
 
 class _Uint16ArrayJs extends _ArrayBufferViewJs implements Uint16Array, List<int> native "*Uint16Array" {
 
-  factory Uint16Array(int length) =>  _construct_Uint16Array(length);
-
-  factory Uint16Array.fromList(List<int> list) => _construct_Uint16Array(list);
-
-  factory Uint16Array.fromBuffer(ArrayBuffer buffer) => _construct_Uint16Array(buffer);
-
-  static _construct_Uint16Array(arg) native 'return new Uint16Array(arg);';
-
   static final int BYTES_PER_ELEMENT = 2;
 
   final int length;
@@ -9998,37 +9939,27 @@ class _Uint16ArrayJs extends _ArrayBufferViewJs implements Uint16Array, List<int
 
   int last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<int> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<int> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [int initialValue]) {
+  void insertRange(int start, int rangeLength, [int initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<int> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <int>[]);
+  List<int> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <int>[]);
 
   // -- end List<int> mixins.
 
-  void setElements(Object array, [int offset = null]) native '''
-if (offset == null) return this.set(array);
-return this.set(array, offset);''';
+  void setElements(Object array, [int offset = null]) native 'set';
 
   _Uint16ArrayJs subarray(int start, [int end = null]) native;
 }
 
 class _Uint32ArrayJs extends _ArrayBufferViewJs implements Uint32Array, List<int> native "*Uint32Array" {
-
-  factory Uint32Array(int length) =>  _construct_Uint32Array(length);
-
-  factory Uint32Array.fromList(List<int> list) => _construct_Uint32Array(list);
-
-  factory Uint32Array.fromBuffer(ArrayBuffer buffer) => _construct_Uint32Array(buffer);
-
-  static _construct_Uint32Array(arg) native 'return new Uint32Array(arg);';
 
   static final int BYTES_PER_ELEMENT = 4;
 
@@ -10090,37 +10021,27 @@ class _Uint32ArrayJs extends _ArrayBufferViewJs implements Uint32Array, List<int
 
   int last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<int> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<int> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [int initialValue]) {
+  void insertRange(int start, int rangeLength, [int initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<int> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <int>[]);
+  List<int> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <int>[]);
 
   // -- end List<int> mixins.
 
-  void setElements(Object array, [int offset = null]) native '''
-if (offset == null) return this.set(array);
-return this.set(array, offset);''';
+  void setElements(Object array, [int offset = null]) native 'set';
 
   _Uint32ArrayJs subarray(int start, [int end = null]) native;
 }
 
 class _Uint8ArrayJs extends _ArrayBufferViewJs implements Uint8Array, List<int> native "*Uint8Array" {
-
-  factory Uint8Array(int length) =>  _construct_Uint8Array(length);
-
-  factory Uint8Array.fromList(List<int> list) => _construct_Uint8Array(list);
-
-  factory Uint8Array.fromBuffer(ArrayBuffer buffer) => _construct_Uint8Array(buffer);
-
-  static _construct_Uint8Array(arg) native 'return new Uint8Array(arg);';
 
   static final int BYTES_PER_ELEMENT = 1;
 
@@ -10182,44 +10103,32 @@ class _Uint8ArrayJs extends _ArrayBufferViewJs implements Uint8Array, List<int> 
 
   int last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<int> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<int> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [int initialValue]) {
+  void insertRange(int start, int rangeLength, [int initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<int> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <int>[]);
+  List<int> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <int>[]);
 
   // -- end List<int> mixins.
 
-  void setElements(Object array, [int offset = null]) native '''
-if (offset == null) return this.set(array);
-return this.set(array, offset);''';
+  void setElements(Object array, [int offset = null]) native 'set';
 
   _Uint8ArrayJs subarray(int start, [int end = null]) native;
 }
 
 class _Uint8ClampedArrayJs extends _Uint8ArrayJs implements Uint8ClampedArray, List<int> native "*Uint8ClampedArray" {
 
-  factory Uint8ClampedArray(int length) =>  _construct_Uint8ClampedArray(length);
-
-  factory Uint8ClampedArray.fromList(List<int> list) => _construct_Uint8ClampedArray(list);
-
-  factory Uint8ClampedArray.fromBuffer(ArrayBuffer buffer) => _construct_Uint8ClampedArray(buffer);
-
-  static _construct_Uint8ClampedArray(arg) native 'return new Uint8ClampedArray(arg);';
-
   // Use implementation from Uint8Array.
   // final int length;
 
-  void setElements(Object array, [int offset = null]) native '''
-if (offset == null) return this.set(array);
-return this.set(array, offset);''';
+  void setElements(Object array, [int offset = null]) native 'set';
 
   _Uint8ClampedArrayJs subarray(int start, [int end = null]) native;
 }
@@ -14892,7 +14801,7 @@ interface Float32Array extends ArrayBufferView, List<num> default _TypedArrayFac
 
   Float32Array.fromList(List<num> list);
 
-  Float32Array.fromBuffer(ArrayBuffer buffer);
+  Float32Array.fromBuffer(ArrayBuffer buffer, [int byteOffset, int length]);
 
   static final int BYTES_PER_ELEMENT = 4;
 
@@ -14914,7 +14823,7 @@ interface Float64Array extends ArrayBufferView, List<num> default _TypedArrayFac
 
   Float64Array.fromList(List<num> list);
 
-  Float64Array.fromBuffer(ArrayBuffer buffer);
+  Float64Array.fromBuffer(ArrayBuffer buffer, [int byteOffset, int length]);
 
   static final int BYTES_PER_ELEMENT = 8;
 
@@ -17201,7 +17110,7 @@ interface Int16Array extends ArrayBufferView, List<int> default _TypedArrayFacto
 
   Int16Array.fromList(List<int> list);
 
-  Int16Array.fromBuffer(ArrayBuffer buffer);
+  Int16Array.fromBuffer(ArrayBuffer buffer, [int byteOffset, int length]);
 
   static final int BYTES_PER_ELEMENT = 2;
 
@@ -17223,7 +17132,7 @@ interface Int32Array extends ArrayBufferView, List<int> default _TypedArrayFacto
 
   Int32Array.fromList(List<int> list);
 
-  Int32Array.fromBuffer(ArrayBuffer buffer);
+  Int32Array.fromBuffer(ArrayBuffer buffer, [int byteOffset, int length]);
 
   static final int BYTES_PER_ELEMENT = 4;
 
@@ -17245,7 +17154,7 @@ interface Int8Array extends ArrayBufferView, List<int> default _TypedArrayFactor
 
   Int8Array.fromList(List<int> list);
 
-  Int8Array.fromBuffer(ArrayBuffer buffer);
+  Int8Array.fromBuffer(ArrayBuffer buffer, [int byteOffset, int length]);
 
   static final int BYTES_PER_ELEMENT = 1;
 
@@ -22058,7 +21967,7 @@ interface Uint16Array extends ArrayBufferView, List<int> default _TypedArrayFact
 
   Uint16Array.fromList(List<int> list);
 
-  Uint16Array.fromBuffer(ArrayBuffer buffer);
+  Uint16Array.fromBuffer(ArrayBuffer buffer, [int byteOffset, int length]);
 
   static final int BYTES_PER_ELEMENT = 2;
 
@@ -22080,7 +21989,7 @@ interface Uint32Array extends ArrayBufferView, List<int> default _TypedArrayFact
 
   Uint32Array.fromList(List<int> list);
 
-  Uint32Array.fromBuffer(ArrayBuffer buffer);
+  Uint32Array.fromBuffer(ArrayBuffer buffer, [int byteOffset, int length]);
 
   static final int BYTES_PER_ELEMENT = 4;
 
@@ -22102,7 +22011,7 @@ interface Uint8Array extends ArrayBufferView, List<int> default _TypedArrayFacto
 
   Uint8Array.fromList(List<int> list);
 
-  Uint8Array.fromBuffer(ArrayBuffer buffer);
+  Uint8Array.fromBuffer(ArrayBuffer buffer, [int byteOffset, int length]);
 
   static final int BYTES_PER_ELEMENT = 1;
 
@@ -22124,7 +22033,7 @@ interface Uint8ClampedArray extends Uint8Array default _TypedArrayFactoryProvide
 
   Uint8ClampedArray.fromList(List<int> list);
 
-  Uint8ClampedArray.fromBuffer(ArrayBuffer buffer);
+  Uint8ClampedArray.fromBuffer(ArrayBuffer buffer, [int byteOffset, int length]);
 
   final int length;
 
@@ -24647,43 +24556,92 @@ class _AudioContextFactoryProvider {
 ''';
 }
 
+class _WebKitPointFactoryProvider {
+
+  factory WebKitPoint(num x, num y) native '''return new WebKitPoint(x, y);''';
+}
+
+class _WebSocketFactoryProvider {
+
+  factory WebSocket(String url) native '''return new WebSocket(url);''';
+}
+// Copyright (c) 2012, the Dart project authors.  Please see the AUTHORS file
+// for details. All rights reserved. Use of this source code is governed by a
+// BSD-style license that can be found in the LICENSE file.
+
 class _TypedArrayFactoryProvider {
 
   factory Float32Array(int length) => _F32(length);
   factory Float32Array.fromList(List<num> list) => _F32(ensureNative(list));
-  factory Float32Array.fromBuffer(ArrayBuffer buffer) => _F32(buffer);
+  factory Float32Array.fromBuffer(ArrayBuffer buffer,
+                                  [int byteOffset = 0, int length]) {
+    if (length == null) return _F32_2(buffer, byteOffset);
+    return _F32_3(buffer, byteOffset, length);
+  }
 
   factory Float64Array(int length) => _F64(length);
   factory Float64Array.fromList(List<num> list) => _F64(ensureNative(list));
-  factory Float64Array.fromBuffer(ArrayBuffer buffer) => _F64(buffer);
+  factory Float64Array.fromBuffer(ArrayBuffer buffer,
+                                  [int byteOffset = 0, int length]) {
+    if (length == null) return _F64_2(buffer, byteOffset);
+    return _F64_3(buffer, byteOffset, length);
+  }
 
   factory Int8Array(int length) => _I8(length);
   factory Int8Array.fromList(List<num> list) => _I8(ensureNative(list));
-  factory Int8Array.fromBuffer(ArrayBuffer buffer) => _I8(buffer);
+  factory Int8Array.fromBuffer(ArrayBuffer buffer,
+                               [int byteOffset = 0, int length]) {
+    if (length == null) return _I8_2(buffer, byteOffset);
+    return _I8_3(buffer, byteOffset, length);
+  }
 
   factory Int16Array(int length) => _I16(length);
   factory Int16Array.fromList(List<num> list) => _I16(ensureNative(list));
-  factory Int16Array.fromBuffer(ArrayBuffer buffer) => _I16(buffer);
+  factory Int16Array.fromBuffer(ArrayBuffer buffer,
+                                [int byteOffset = 0, int length]) {
+    if (length == null) return _I16_2(buffer, byteOffset);
+    return _I16_3(buffer, byteOffset, length);
+  }
 
   factory Int32Array(int length) => _I32(length);
   factory Int32Array.fromList(List<num> list) => _I32(ensureNative(list));
-  factory Int32Array.fromBuffer(ArrayBuffer buffer) => _I32(buffer);
+  factory Int32Array.fromBuffer(ArrayBuffer buffer,
+                                [int byteOffset = 0, int length]) {
+    if (length == null) return _I32_2(buffer, byteOffset);
+    return _I32_3(buffer, byteOffset, length);
+  }
 
   factory Uint8Array(int length) => _U8(length);
   factory Uint8Array.fromList(List<num> list) => _U8(ensureNative(list));
-  factory Uint8Array.fromBuffer(ArrayBuffer buffer) => _U8(buffer);
+  factory Uint8Array.fromBuffer(ArrayBuffer buffer,
+                                [int byteOffset = 0, int length]) {
+    if (length == null) return _U8_2(buffer, byteOffset);
+    return _U8_3(buffer, byteOffset, length);
+  }
 
   factory Uint16Array(int length) => _U16(length);
   factory Uint16Array.fromList(List<num> list) => _U16(ensureNative(list));
-  factory Uint16Array.fromBuffer(ArrayBuffer buffer) => _U16(buffer);
+  factory Uint16Array.fromBuffer(ArrayBuffer buffer,
+                                 [int byteOffset = 0, int length]) {
+    if (length == null) return _U16_2(buffer, byteOffset);
+    return _U16_3(buffer, byteOffset, length);
+  }
 
   factory Uint32Array(int length) => _U32(length);
   factory Uint32Array.fromList(List<num> list) => _U32(ensureNative(list));
-  factory Uint32Array.fromBuffer(ArrayBuffer buffer) => _U32(buffer);
+  factory Uint32Array.fromBuffer(ArrayBuffer buffer,
+                                 [int byteOffset = 0, int length]) {
+    if (length == null) return _U32_2(buffer, byteOffset);
+    return _U32_3(buffer, byteOffset, length);
+  }
 
   factory Uint8ClampedArray(int length) => _U8C(length);
   factory Uint8ClampedArray.fromList(List<num> list) => _U8C(ensureNative(list));
-  factory Uint8ClampedArray.fromBuffer(ArrayBuffer buffer) => _U8C(buffer);
+  factory Uint8ClampedArray.fromBuffer(ArrayBuffer buffer,
+                                       [int byteOffset = 0, int length]) {
+    if (length == null) return _U8C_2(buffer, byteOffset);
+    return _U8C_3(buffer, byteOffset, length);
+  }
 
   static Float32Array _F32(arg) native 'return new Float32Array(arg);';
   static Float64Array _F64(arg) native 'return new Float64Array(arg);';
@@ -24695,17 +24653,30 @@ class _TypedArrayFactoryProvider {
   static Uint32Array _U32(arg) native 'return new Uint32Array(arg);';
   static Uint8ClampedArray _U8C(arg) native 'return new Uint8ClampedArray(arg);';
 
+  static Float32Array _F32_2(arg1, arg2) native 'return new Float32Array(arg1, arg2);';
+  static Float64Array _F64_2(arg1, arg2) native 'return new Float64Array(arg1, arg2);';
+  static Int8Array _I8_2(arg1, arg2) native 'return new Int8Array(arg1, arg2);';
+  static Int16Array _I16_2(arg1, arg2) native 'return new Int16Array(arg1, arg2);';
+  static Int32Array _I32_2(arg1, arg2) native 'return new Int32Array(arg1, arg2);';
+  static Uint8Array _U8_2(arg1, arg2) native 'return new Uint8Array(arg1, arg2);';
+  static Uint16Array _U16_2(arg1, arg2) native 'return new Uint16Array(arg1, arg2);';
+  static Uint32Array _U32_2(arg1, arg2) native 'return new Uint32Array(arg1, arg2);';
+  static Uint8ClampedArray _U8C_2(arg1, arg2) native 'return new Uint8ClampedArray(arg1, arg2);';
+
+  static Float32Array _F32_3(arg1, arg2, arg3) native 'return new Float32Array(arg1, arg2, arg3);';
+  static Float64Array _F64_3(arg1, arg2, arg3) native 'return new Float64Array(arg1, arg2, arg3);';
+  static Int8Array _I8_3(arg1, arg2, arg3) native 'return new Int8Array(arg1, arg2, arg3);';
+  static Int16Array _I16_3(arg1, arg2, arg3) native 'return new Int16Array(arg1, arg2, arg3);';
+  static Int32Array _I32_3(arg1, arg2, arg3) native 'return new Int32Array(arg1, arg2, arg3);';
+  static Uint8Array _U8_3(arg1, arg2, arg3) native 'return new Uint8Array(arg1, arg2, arg3);';
+  static Uint16Array _U16_3(arg1, arg2, arg3) native 'return new Uint16Array(arg1, arg2, arg3);';
+  static Uint32Array _U32_3(arg1, arg2, arg3) native 'return new Uint32Array(arg1, arg2, arg3);';
+  static Uint8ClampedArray _U8C_3(arg1, arg2, arg3) native 'return new Uint8ClampedArray(arg1, arg2, arg3);';
+
+
+  // Ensures that [list] is a JavaScript Array or a typed array.  If necessary,
+  // copies the list.
   static ensureNative(List list) => list;  // TODO: make sure.
-}
-
-class _WebKitPointFactoryProvider {
-
-  factory WebKitPoint(num x, num y) native '''return new WebKitPoint(x, y);''';
-}
-
-class _WebSocketFactoryProvider {
-
-  factory WebSocket(String url) native '''return new WebSocket(url);''';
 }
 // Copyright (c) 2011, the Dart project authors.  Please see the AUTHORS file
 // for details. All rights reserved. Use of this source code is governed by a

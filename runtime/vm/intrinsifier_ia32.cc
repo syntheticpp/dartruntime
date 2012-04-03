@@ -105,6 +105,8 @@ static bool ObjectArray_Allocate(Assembler* assembler) {
   // Assert that length is a Smi.
   __ testl(EDI, Immediate(kSmiTagSize));
   __ j(NOT_ZERO, &fall_through);
+  __ cmpl(EDI, Immediate(0));
+  __ j(LESS, &fall_through, Assembler::kNearJump);
   intptr_t fixed_size = sizeof(RawArray) + kObjectAlignment - 1;
   __ leal(EDI, Address(EDI, TIMES_2, fixed_size));  // EDI is a Smi.
   ASSERT(kSmiTagShift == 1);
@@ -121,7 +123,7 @@ static bool ObjectArray_Allocate(Assembler* assembler) {
   // EBX: potential next object start.
   // EDI: allocation size.
   __ cmpl(EBX, Address::Absolute(heap->EndAddress()));
-  __ j(ABOVE_EQUAL, &fall_through);
+  __ j(ABOVE_EQUAL, &fall_through, Assembler::kNearJump);
 
   // Successfully allocated the object(s), now update top to point to
   // next object start and initialize the object.
@@ -138,7 +140,7 @@ static bool ObjectArray_Allocate(Assembler* assembler) {
     __ j(ABOVE, &size_tag_overflow, Assembler::kNearJump);
     __ shll(EDI, Immediate(RawObject::kSizeTagBit - kObjectAlignmentLog2));
     __ movl(FieldAddress(EAX, Array::tags_offset()), EDI);  // Tags.
-    __ jmp(&done);
+    __ jmp(&done, Assembler::kNearJump);
 
     __ Bind(&size_tag_overflow);
     __ movl(FieldAddress(EAX, Array::tags_offset()), Immediate(0));
@@ -214,13 +216,58 @@ static bool Array_getIndexed(Assembler* assembler) {
 }
 
 
+static intptr_t ComputeObjectArrayTypeArgumentsOffset() {
+  const String& class_name = String::Handle(String::NewSymbol("ObjectArray"));
+  const Class& cls = Class::Handle(
+      Library::Handle(Library::CoreImplLibrary()).LookupClass(class_name));
+  ASSERT(!cls.IsNull());
+  ASSERT(cls.HasTypeArguments());
+  ASSERT(cls.NumTypeArguments() == 1);
+  const intptr_t field_offset = cls.type_arguments_instance_field_offset();
+  ASSERT(field_offset != Class::kNoTypeArguments);
+  return field_offset;
+}
+
+
 // Intrinsify only for Smi value and index. Non-smi values need a store buffer
 // update. Array length is always a Smi.
 static bool Array_setIndexed(Assembler* assembler) {
-  if (FLAG_enable_type_checks) {
-    return false;
-  }
   Label fall_through;
+  if (FLAG_enable_type_checks) {
+    const intptr_t type_args_field_offset =
+        ComputeObjectArrayTypeArgumentsOffset();
+    // Inline simple tests (Smi, null), fallthrough if not positive.
+    const Immediate raw_null =
+        Immediate(reinterpret_cast<intptr_t>(Object::null()));
+    Label checked_ok;
+    __ movl(EDI, Address(ESP, + 1 * kWordSize));  // Value.
+    // Null value is valid for any type.
+    __ cmpl(EDI, raw_null);
+    __ j(EQUAL, &checked_ok, Assembler::kNearJump);
+
+    __ movl(EBX, Address(ESP, + 3 * kWordSize));  // Array.
+    __ movl(EBX, FieldAddress(EBX, type_args_field_offset));
+    // EBX: Type arguments of array.
+    __ cmpl(EBX, raw_null);
+    __ j(EQUAL, &checked_ok, Assembler::kNearJump);
+    // Check if it's Dynamic.
+    // For now handle only TypeArguments and bail out if InstantiatedTypeArgs.
+    __ movl(EAX, FieldAddress(EBX, Object::class_offset()));
+    __ CompareObject(EAX, Object::ZoneHandle(Object::type_arguments_class()));
+    __ j(NOT_EQUAL, &fall_through, Assembler::kNearJump);
+    // Get type at index 0.
+    __ movl(EAX, FieldAddress(EBX, TypeArguments::type_at_offset(0)));
+    __ CompareObject(EAX, Type::ZoneHandle(Type::DynamicType()));
+    __ j(EQUAL,  &checked_ok, Assembler::kNearJump);
+    // Check for int and num.
+    __ testl(EDI, Immediate(kSmiTagMask));  // Value is Smi?
+    __ j(NOT_ZERO, &fall_through, Assembler::kNearJump);  // Non-smi value.
+    __ CompareObject(EAX, Type::ZoneHandle(Type::IntInterface()));
+    __ j(EQUAL,  &checked_ok, Assembler::kNearJump);
+    __ CompareObject(EAX, Type::ZoneHandle(Type::NumberInterface()));
+    __ j(NOT_EQUAL, &fall_through, Assembler::kNearJump);
+    __ Bind(&checked_ok);
+  }
   __ movl(EBX, Address(ESP, + 2 * kWordSize));  // Index.
   __ testl(EBX, Immediate(kSmiTagMask));
   // Index not Smi.
@@ -442,6 +489,9 @@ static bool Integer_modulo(Assembler* assembler) {
   Label fall_through, return_zero;
   TestBothArgumentsSmis(assembler, &fall_through);
   // EAX: right argument (divisor)
+  // Check if modulo by zero -> exception thrown in main function.
+  __ cmpl(EAX, Immediate(0));
+  __ j(EQUAL, &fall_through,  Assembler::kNearJump);
   __ movl(EBX, Address(ESP, + 2 * kWordSize));  // Left argument (dividend).
   __ cmpl(EBX, Immediate(0));
   __ j(LESS, &fall_through, Assembler::kNearJump);
@@ -690,6 +740,9 @@ static bool Integer_sar(Assembler* assembler) {
   // For shifting right a Smi the result is the same for all numbers
   // >= count_limit.
   __ SmiUntag(EAX);
+  // Negative counts throw exception.
+  __ cmpl(EAX, Immediate(0));
+  __ j(LESS, &fall_through, Assembler::kNearJump);
   __ cmpl(EAX, count_limit);
   __ j(LESS_EQUAL, &shift_count_ok, Assembler::kNearJump);
   __ movl(EAX, count_limit);
@@ -1000,10 +1053,11 @@ static void EmitTrigonometric(Assembler* assembler,
   const Class& double_class = Class::ZoneHandle(
       Isolate::Current()->object_store()->double_class());
   __ LoadObject(EBX, double_class);
+  Label alloc_failed;
   AssemblerMacros::TryAllocate(assembler,
                                double_class,
                                EBX,  // Class register.
-                               &fall_through,
+                               &alloc_failed,
                                EAX);  // Result register.
   __ fstpl(FieldAddress(EAX, Double::value_offset()));
   __ ret();
@@ -1014,6 +1068,10 @@ static void EmitTrigonometric(Assembler* assembler,
   __ filds(Address(ESP, 0));
   __ popl(EAX);
   __ jmp(&double_op);
+
+  __ Bind(&alloc_failed);
+  __ ffree(0);
+  __ fincstp();
 
   __ Bind(&fall_through);
 }

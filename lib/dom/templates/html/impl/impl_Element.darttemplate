@@ -10,7 +10,7 @@ class _ChildrenElementList implements ElementList {
   final _HTMLCollectionImpl _childElements;
 
   _ChildrenElementList._wrap(_ElementImpl element)
-    : _childElements = element._children,
+    : _childElements = element.$dom_children,
       _element = element;
 
   List<Element> _toList() {
@@ -22,7 +22,7 @@ class _ChildrenElementList implements ElementList {
   }
 
   _ElementImpl get first() {
-    return _element._firstElementChild;
+    return _element.$dom_firstElementChild;
   }
 
   void forEach(void f(Element element)) {
@@ -68,7 +68,7 @@ class _ChildrenElementList implements ElementList {
   }
 
   bool isEmpty() {
-    return _element._firstElementChild == null;
+    return _element.$dom_firstElementChild == null;
   }
 
   int get length() {
@@ -80,7 +80,7 @@ class _ChildrenElementList implements ElementList {
   }
 
   void operator []=(int index, _ElementImpl value) {
-    _element._replaceChild(value, _childElements[index]);
+    _element.$dom_replaceChild(value, _childElements[index]);
   }
 
    void set length(int newLength) {
@@ -89,7 +89,7 @@ class _ChildrenElementList implements ElementList {
    }
 
   Element add(_ElementImpl value) {
-    _element._appendChild(value);
+    _element.$dom_appendChild(value);
     return value;
   }
 
@@ -99,7 +99,7 @@ class _ChildrenElementList implements ElementList {
 
   void addAll(Collection<Element> collection) {
     for (_ElementImpl element in collection) {
-      _element._appendChild(element);
+      _element.$dom_appendChild(element);
     }
   }
 
@@ -111,20 +111,20 @@ class _ChildrenElementList implements ElementList {
     throw 'Not impl yet. todo(jacobr)';
   }
 
-  void setRange(int start, int length, List from, [int startFrom = 0]) {
+  void setRange(int start, int rangeLength, List from, [int startFrom = 0]) {
     throw const NotImplementedException();
   }
 
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw const NotImplementedException();
   }
 
-  void insertRange(int start, int length, [initialValue = null]) {
+  void insertRange(int start, int rangeLength, [initialValue = null]) {
     throw const NotImplementedException();
   }
 
-  List getRange(int start, int length) =>
-    new _FrozenElementList._wrap(_Lists.getRange(this, start, length,
+  List getRange(int start, int rangeLength) =>
+    new _FrozenElementList._wrap(_Lists.getRange(this, start, rangeLength,
         <Element>[]));
 
   int indexOf(Element element, [int start = 0]) {
@@ -142,15 +142,15 @@ class _ChildrenElementList implements ElementList {
   }
 
   Element removeLast() {
-    final last = this.last();
-    if (last != null) {
-      _element._removeChild(last);
+    final result = this.last();
+    if (result != null) {
+      _element.$dom_removeChild(result);
     }
-    return last;
+    return result;
   }
 
   Element last() {
-    return _element.lastElementChild;
+    return _element.$dom_lastElementChild;
   }
 }
 
@@ -239,20 +239,20 @@ class _FrozenElementList implements ElementList {
     throw const UnsupportedOperationException('');
   }
 
-  void setRange(int start, int length, List from, [int startFrom = 0]) {
+  void setRange(int start, int rangeLength, List from, [int startFrom = 0]) {
     throw const UnsupportedOperationException('');
   }
 
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw const UnsupportedOperationException('');
   }
 
-  void insertRange(int start, int length, [initialValue = null]) {
+  void insertRange(int start, int rangeLength, [initialValue = null]) {
     throw const UnsupportedOperationException('');
   }
 
-  ElementList getRange(int start, int length) =>
-    new _FrozenElementList._wrap(_nodeList.getRange(start, length));
+  ElementList getRange(int start, int rangeLength) =>
+    new _FrozenElementList._wrap(_nodeList.getRange(start, rangeLength));
 
   int indexOf(Element element, [int start = 0]) =>
     _nodeList.indexOf(element, start);
@@ -301,18 +301,18 @@ class _ElementList extends _ListWrapper<Element> implements ElementList {
   ElementList filter(bool f(Element element)) =>
     new _ElementList(super.filter(f));
 
-  ElementList getRange(int start, int length) =>
-    new _ElementList(super.getRange(start, length));
+  ElementList getRange(int start, int rangeLength) =>
+    new _ElementList(super.getRange(start, rangeLength));
 }
 
-class ElementAttributeMap implements Map<String, String> {
+class _ElementAttributeMap implements AttributeMap {
 
   final _ElementImpl _element;
 
-  ElementAttributeMap._wrap(this._element);
+  _ElementAttributeMap(this._element);
 
   bool containsValue(String value) {
-    final attributes = _element._attributes;
+    final attributes = _element.$dom_attributes;
     for (int i = 0, len = attributes.length; i < len; i++) {
       if(value == attributes[i].value) {
         return true;
@@ -322,15 +322,15 @@ class ElementAttributeMap implements Map<String, String> {
   }
 
   bool containsKey(String key) {
-    return _element._hasAttribute(key);
+    return _element.$dom_hasAttribute(key);
   }
 
   String operator [](String key) {
-    return _element._getAttribute(key);
+    return _element.$dom_getAttribute(key);
   }
 
-  void operator []=(String key, String value) {
-    _element._setAttribute(key, value);
+  void operator []=(String key, value) {
+    _element.$dom_setAttribute(key, '$value');
   }
 
   String putIfAbsent(String key, String ifAbsent()) {
@@ -340,18 +340,18 @@ class ElementAttributeMap implements Map<String, String> {
   }
 
   String remove(String key) {
-    _element._removeAttribute(key);
+    _element.$dom_removeAttribute(key);
   }
 
   void clear() {
-    final attributes = _element._attributes;
+    final attributes = _element.$dom_attributes;
     for (int i = attributes.length - 1; i >= 0; i--) {
       remove(attributes[i].name);
     }
   }
 
   void forEach(void f(String key, String value)) {
-    final attributes = _element._attributes;
+    final attributes = _element.$dom_attributes;
     for (int i = 0, len = attributes.length; i < len; i++) {
       final item = attributes[i];
       f(item.name, item.value);
@@ -360,7 +360,7 @@ class ElementAttributeMap implements Map<String, String> {
 
   Collection<String> getKeys() {
     // TODO(jacobr): generate a lazy collection instead.
-    final attributes = _element._attributes;
+    final attributes = _element.$dom_attributes;
     final keys = new List<String>(attributes.length);
     for (int i = 0, len = attributes.length; i < len; i++) {
       keys[i] = attributes[i].name;
@@ -370,7 +370,7 @@ class ElementAttributeMap implements Map<String, String> {
 
   Collection<String> getValues() {
     // TODO(jacobr): generate a lazy collection instead.
-    final attributes = _element._attributes;
+    final attributes = _element.$dom_attributes;
     final values = new List<String>(attributes.length);
     for (int i = 0, len = attributes.length; i < len; i++) {
       values[i] = attributes[i].value;
@@ -382,7 +382,7 @@ class ElementAttributeMap implements Map<String, String> {
    * The number of {key, value} pairs in the map.
    */
   int get length() {
-    return _element._attributes.length;
+    return _element.$dom_attributes.length;
   }
 
   /**
@@ -390,6 +390,203 @@ class ElementAttributeMap implements Map<String, String> {
    */
   bool isEmpty() {
     return length == 0;
+  }
+}
+
+/**
+ * Provides a Map abstraction on top of data-* attributes, similar to the
+ * dataSet in the old DOM.
+ */
+class _DataAttributeMap implements AttributeMap {
+
+  final Map<String, String> $dom_attributes;
+
+  _DataAttributeMap(this.$dom_attributes);
+
+  // interface Map
+
+  // TODO: Use lazy iterator when it is available on Map.
+  bool containsValue(String value) => getValues().some((v) => v == value);
+
+  bool containsKey(String key) => $dom_attributes.containsKey(_attr(key));
+
+  String operator [](String key) => $dom_attributes[_attr(key)];
+
+  void operator []=(String key, value) {
+    $dom_attributes[_attr(key)] = '$value';
+  }
+
+  String putIfAbsent(String key, String ifAbsent()) {
+    $dom_attributes.putIfAbsent(_attr(key), ifAbsent);
+  }
+
+  String remove(String key) => $dom_attributes.remove(_attr(key));
+
+  void clear() {
+    // Needs to operate on a snapshot since we are mutating the collection.
+    for (String key in getKeys()) {
+      remove(key);
+    }
+  }
+
+  void forEach(void f(String key, String value)) {
+    $dom_attributes.forEach((String key, String value) {
+      if (_matches(key)) {
+        f(_strip(key), value);
+      }
+    });
+  }
+
+  Collection<String> getKeys() {
+    final keys = new List<String>();
+    $dom_attributes.forEach((String key, String value) {
+      if (_matches(key)) {
+        keys.add(_strip(key));
+      }
+    });
+    return keys;
+  }
+
+  Collection<String> getValues() {
+    final values = new List<String>();
+    $dom_attributes.forEach((String key, String value) {
+      if (_matches(key)) {
+        values.add(value);
+      }
+    });
+    return values;
+  }
+
+  int get length() => getKeys().length;
+
+  // TODO: Use lazy iterator when it is available on Map.
+  bool isEmpty() => length == 0;
+
+  // Helpers.
+  String _attr(String key) => 'data-$key';
+  bool _matches(String key) => key.startsWith('data-');
+  String _strip(String key) => key.substring(5);
+}
+
+class _CssClassSet implements Set<String> {
+
+  final _ElementImpl _element;
+
+  _CssClassSet(this._element);
+
+  String toString() => _formatSet(_read());
+
+  // interface Iterable - BEGIN
+  Iterator<String> iterator() => _read().iterator();
+  // interface Iterable - END
+
+  // interface Collection - BEGIN
+  void forEach(void f(String element)) {
+    _read().forEach(f);
+  }
+
+  Collection map(f(String element)) => _read().map(f);
+
+  Collection<String> filter(bool f(String element)) => _read().filter(f);
+
+  bool every(bool f(String element)) => _read().every(f);
+
+  bool some(bool f(String element)) => _read().some(f);
+
+  bool isEmpty() => _read().isEmpty();
+
+  int get length() =>_read().length;
+
+  // interface Collection - END
+
+  // interface Set - BEGIN
+  bool contains(String value) => _read().contains(value);
+
+  void add(String value) {
+    // TODO - figure out if we need to do any validation here
+    // or if the browser natively does enough
+    _modify((s) => s.add(value));
+  }
+
+  bool remove(String value) {
+    Set<String> s = _read();
+    bool result = s.remove(value);
+    _write(s);
+    return result;
+  }
+
+  void addAll(Collection<String> collection) {
+    // TODO - see comment above about validation
+    _modify((s) => s.addAll(collection));
+  }
+
+  void removeAll(Collection<String> collection) {
+    _modify((s) => s.removeAll(collection));
+  }
+
+  bool isSubsetOf(Collection<String> collection) =>
+    _read().isSubsetOf(collection);
+
+  bool containsAll(Collection<String> collection) =>
+    _read().containsAll(collection);
+
+  Set<String> intersection(Collection<String> other) =>
+    _read().intersection(other);
+
+  void clear() {
+    _modify((s) => s.clear());
+  }
+  // interface Set - END
+
+  /**
+   * Helper method used to modify the set of css classes on this element.
+   *
+   *   f - callback with:
+   *      s - a Set of all the css class name currently on this element.
+   *
+   *   After f returns, the modified set is written to the
+   *       className property of this element.
+   */
+  void _modify( f(Set<String> s)) {
+    Set<String> s = _read();
+    f(s);
+    _write(s);
+  }
+
+  /**
+   * Read the class names from the Element class property,
+   * and put them into a set (duplicates are discarded).
+   */
+  Set<String> _read() {
+    // TODO(mattsh) simplify this once split can take regex.
+    Set<String> s = new Set<String>();
+    for (String name in _classname().split(' ')) {
+      String trimmed = name.trim();
+      if (!trimmed.isEmpty()) {
+        s.add(trimmed);
+      }
+    }
+    return s;
+  }
+
+  /**
+   * Read the class names as a space-separated string. This is meant to be
+   * overridden by subclasses.
+   */
+  String _classname() => _element.$dom_className;
+
+  /**
+   * Join all the elements of a set into one string and write
+   * back to the element.
+   */
+  void _write(Set s) {
+    _element.$dom_className = _formatSet(s);
+  }
+
+  String _formatSet(Set<String> s) {
+    // TODO(mattsh) should be able to pass Set to String.joins http:/b/5398605
+    List list = new List.from(s);
+    return Strings.join(list, ' ');
   }
 }
 
@@ -429,20 +626,20 @@ class _ElementRectImpl implements ElementRect {
   final _ClientRectListImpl _clientRects;
 
   _ElementRectImpl(_ElementImpl element) :
-    client = new _SimpleClientRect(element._clientLeft,
-                                  element._clientTop,
-                                  element._clientWidth, 
-                                  element._clientHeight), 
-    offset = new _SimpleClientRect(element._offsetLeft,
-                                  element._offsetTop,
-                                  element._offsetWidth,
-                                  element._offsetHeight),
-    scroll = new _SimpleClientRect(element._scrollLeft,
-                                  element._scrollTop,
-                                  element._scrollWidth,
-                                  element._scrollHeight),
-    _boundingClientRect = element._getBoundingClientRect(),
-    _clientRects = element._getClientRects();
+    client = new _SimpleClientRect(element.$dom_clientLeft,
+                                  element.$dom_clientTop,
+                                  element.$dom_clientWidth, 
+                                  element.$dom_clientHeight), 
+    offset = new _SimpleClientRect(element.$dom_offsetLeft,
+                                  element.$dom_offsetTop,
+                                  element.$dom_offsetWidth,
+                                  element.$dom_offsetHeight),
+    scroll = new _SimpleClientRect(element.$dom_scrollLeft,
+                                  element.$dom_scrollTop,
+                                  element.$dom_scrollWidth,
+                                  element.$dom_scrollHeight),
+    _boundingClientRect = element.$dom_getBoundingClientRect(),
+    _clientRects = element.$dom_getClientRects();
 
   _ClientRectImpl get bounding() => _boundingClientRect;
 
@@ -458,21 +655,11 @@ class _ElementRectImpl implements ElementRect {
 
 class $CLASSNAME$EXTENDS$IMPLEMENTS$NATIVESPEC {
 
-  // TODO(jacobr): caching these may hurt performance.
-  ElementAttributeMap _elementAttributeMap;
-  _CssClassSet _cssClassSet;
-  _DataAttributeMap _dataAttributes;
-
   /**
    * @domName Element.hasAttribute, Element.getAttribute, Element.setAttribute,
    *   Element.removeAttribute
    */
-  Map<String, String> get attributes() {
-    if (_elementAttributeMap === null) {
-      _elementAttributeMap = new ElementAttributeMap._wrap(this);
-    }
-    return _elementAttributeMap;
-  }
+  _ElementAttributeMap get attributes() => new _ElementAttributeMap(this);
 
   void set attributes(Map<String, String> value) {
     Map<String, String> attributes = this.attributes;
@@ -491,14 +678,9 @@ class $CLASSNAME$EXTENDS$IMPLEMENTS$NATIVESPEC {
   ElementList get elements() => new _ChildrenElementList._wrap(this);
 
   ElementList queryAll(String selectors) =>
-    new _FrozenElementList._wrap(_querySelectorAll(selectors));
+    new _FrozenElementList._wrap($dom_querySelectorAll(selectors));
 
-  Set<String> get classes() {
-    if (_cssClassSet === null) {
-      _cssClassSet = new _CssClassSet(this);
-    }
-    return _cssClassSet;
-  }
+  _CssClassSet get classes() => new _CssClassSet(this);
 
   void set classes(Collection<String> value) {
     _CssClassSet classSet = classes;
@@ -506,15 +688,11 @@ class $CLASSNAME$EXTENDS$IMPLEMENTS$NATIVESPEC {
     classSet.addAll(value);
   }
 
-  Map<String, String> get dataAttributes() {
-    if (_dataAttributes === null) {
-      _dataAttributes = new _DataAttributeMap(attributes);
-    }
-    return _dataAttributes;
-  }
+  Map<String, String> get dataAttributes() =>
+    new _DataAttributeMap(attributes);
 
   void set dataAttributes(Map<String, String> value) {
-    Map<String, String> dataAttributes = this.dataAttributes;
+    final dataAttributes = this.dataAttributes;
     dataAttributes.clear();
     for (String key in value.getKeys()) {
       dataAttributes[key] = value[key];
@@ -534,8 +712,70 @@ class $CLASSNAME$EXTENDS$IMPLEMENTS$NATIVESPEC {
 
   Future<CSSStyleDeclaration> getComputedStyle(String pseudoElement) {
     return _createMeasurementFuture(
-        () => _window._getComputedStyle(this, pseudoElement),
+        () => _window.$dom_getComputedStyle(this, pseudoElement),
         new Completer<CSSStyleDeclaration>());
   }
 $!MEMBERS
+}
+
+final _START_TAG_REGEXP = const RegExp('<(\\w+)');
+class _ElementFactoryProvider {
+  static final _CUSTOM_PARENT_TAG_MAP = const {
+    'body' : 'html',
+    'head' : 'html',
+    'caption' : 'table',
+    'td': 'tr',
+    'colgroup': 'table',
+    'col' : 'colgroup',
+    'tr' : 'tbody',
+    'tbody' : 'table',
+    'tfoot' : 'table',
+    'thead' : 'table',
+    'track' : 'audio',
+  };
+
+  /** @domName Document.createElement */
+  factory Element.html(String html) {
+    // TODO(jacobr): this method can be made more robust and performant.
+    // 1) Cache the dummy parent elements required to use innerHTML rather than
+    //    creating them every call.
+    // 2) Verify that the html does not contain leading or trailing text nodes.
+    // 3) Verify that the html does not contain both <head> and <body> tags.
+    // 4) Detatch the created element from its dummy parent.
+    String parentTag = 'div';
+    String tag;
+    final match = _START_TAG_REGEXP.firstMatch(html);
+    if (match !== null) {
+      tag = match.group(1).toLowerCase();
+      if (_CUSTOM_PARENT_TAG_MAP.containsKey(tag)) {
+        parentTag = _CUSTOM_PARENT_TAG_MAP[tag];
+      }
+    }
+    final _ElementImpl temp = new Element.tag(parentTag);
+    temp.innerHTML = html;
+
+    Element element;
+    if (temp.elements.length == 1) {
+      element = temp.elements.first;
+    } else if (parentTag == 'html' && temp.elements.length == 2) {
+      // Work around for edge case in WebKit and possibly other browsers where
+      // both body and head elements are created even though the inner html
+      // only contains a head or body element.
+      element = temp.elements[tag == 'head' ? 0 : 1];
+    } else {
+      throw new IllegalArgumentException('HTML had ${temp.elements.length} ' +
+          'top level elements but 1 expected');
+    }
+    element.remove();
+    return element;
+  }
+
+  /** @domName Document.createElement */
+$if FROG
+  // Optimization to improve performance until the frog compiler inlines this
+  // method.
+  factory Element.tag(String tag) native "return document.createElement(tag)";
+$else
+  factory Element.tag(String tag) => _document.$dom_createElement(tag);
+$endif
 }

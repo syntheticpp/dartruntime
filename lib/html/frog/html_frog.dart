@@ -11,45 +11,13 @@
 
 
 
-_WindowImpl _cachedWindow;
-_DocumentImpl _cachedDocument;
 
-void _init() {
-  _cachedDocument = _document;
-  _cachedWindow = _window;
-  // Feature detect that dart:dom and dart:html are not both loaded by
-  // checking for the presence of a bug that manifests itself when both
-  // libraries are loaded.
-  // TODO(jacobr): remove this code once b/1911 is fixed and the frog compiler
-  // is changed to generate compile time errors if two libraries that define
-  // the same native types in conflicting ways are imported.
-  var element = new Element.tag('body');
-  element.innerHTML = 'f';
-  if (element.text == '') {
-    _cachedWindow.console.error(
-      'Cannot import dart:html and dart:dom within the same application.');
-    throw new UnsupportedOperationException(
-      'Cannot import dart:html and dart:dom within the same application.');
-  }
-}
-
-Window get window() {
-  if (_cachedWindow == null) {
-    _init();
-  }
-  return _cachedWindow;
-}
-
+Window get window() native "return window;";
 _WindowImpl get _window() native "return window;";
 
-Document get document() {
-  if (_cachedDocument == null) {
-    _init();
-  }
-  return _cachedDocument;
-}
+Document get document() native "return document;";
 
-_DocumentImpl get _document() native "return window.document.documentElement;";
+_DocumentImpl get _document() native "return document;";
 
 // Workaround for tags like <cite> that lack their own Element subclass --
 // Dart issue 1990.
@@ -61,11 +29,11 @@ class _AbstractWorkerImpl extends _EventTargetImpl implements AbstractWorker nat
   _AbstractWorkerEventsImpl get on() =>
     new _AbstractWorkerEventsImpl(this);
 
-  void _addEventListener(String type, EventListener listener, [bool useCapture = null]) native "this.addEventListener(type, listener, useCapture);";
+  void $dom_addEventListener(String type, EventListener listener, [bool useCapture = null]) native "addEventListener";
 
-  bool _dispatchEvent(_EventImpl evt) native "return this.dispatchEvent(evt);";
+  bool $dom_dispatchEvent(_EventImpl evt) native "dispatchEvent";
 
-  void _removeEventListener(String type, EventListener listener, [bool useCapture = null]) native "this.removeEventListener(type, listener, useCapture);";
+  void $dom_removeEventListener(String type, EventListener listener, [bool useCapture = null]) native "removeEventListener";
 }
 
 class _AbstractWorkerEventsImpl extends _EventsImpl implements AbstractWorkerEvents {
@@ -3854,18 +3822,18 @@ class _CanvasPixelArrayImpl implements CanvasPixelArray native "*CanvasPixelArra
 
   int last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<int> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<int> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [int initialValue]) {
+  void insertRange(int start, int rangeLength, [int initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<int> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <int>[]);
+  List<int> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <int>[]);
 
   // -- end List<int> mixins.
 }
@@ -4207,11 +4175,11 @@ class _DOMApplicationCacheImpl extends _EventTargetImpl implements DOMApplicatio
 
   void abort() native;
 
-  void _addEventListener(String type, EventListener listener, [bool useCapture = null]) native "this.addEventListener(type, listener, useCapture);";
+  void $dom_addEventListener(String type, EventListener listener, [bool useCapture = null]) native "addEventListener";
 
-  bool _dispatchEvent(_EventImpl evt) native "return this.dispatchEvent(evt);";
+  bool $dom_dispatchEvent(_EventImpl evt) native "dispatchEvent";
 
-  void _removeEventListener(String type, EventListener listener, [bool useCapture = null]) native "this.removeEventListener(type, listener, useCapture);";
+  void $dom_removeEventListener(String type, EventListener listener, [bool useCapture = null]) native "removeEventListener";
 
   void swapCache() native;
 
@@ -4322,15 +4290,11 @@ class _DOMImplementationImpl implements DOMImplementation native "*DOMImplementa
 
   _CSSStyleSheetImpl createCSSStyleSheet(String title, String media) native;
 
-  _DocumentImpl createDocument(String namespaceURI, String qualifiedName, _DocumentTypeImpl doctype) => _FixHtmlDocumentReference(_createDocument(namespaceURI, qualifiedName, doctype));
-
-  _EventTargetImpl _createDocument(String namespaceURI, String qualifiedName, _DocumentTypeImpl doctype) native "return this.createDocument(namespaceURI, qualifiedName, doctype);";
+  _DocumentImpl createDocument(String namespaceURI, String qualifiedName, _DocumentTypeImpl doctype) native;
 
   _DocumentTypeImpl createDocumentType(String qualifiedName, String publicId, String systemId) native;
 
-  _DocumentImpl createHTMLDocument(String title) => _FixHtmlDocumentReference(_createHTMLDocument(title));
-
-  _EventTargetImpl _createHTMLDocument(String title) native "return this.createHTMLDocument(title);";
+  _DocumentImpl createHTMLDocument(String title) native;
 
   bool hasFeature(String feature, String version) native;
 }
@@ -4357,9 +4321,7 @@ class _DOMMimeTypeArrayImpl implements DOMMimeTypeArray native "*DOMMimeTypeArra
 
 class _DOMParserImpl implements DOMParser native "*DOMParser" {
 
-  _DocumentImpl parseFromString(String str, String contentType) => _FixHtmlDocumentReference(_parseFromString(str, contentType));
-
-  _EventTargetImpl _parseFromString(String str, String contentType) native "return this.parseFromString(str, contentType);";
+  _DocumentImpl parseFromString(String str, String contentType) native;
 }
 
 class _DOMPluginImpl implements DOMPlugin native "*DOMPlugin" {
@@ -4680,131 +4642,148 @@ class _DivElementImpl extends _ElementImpl implements DivElement native "*HTMLDi
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-class _DocumentImpl extends _ElementImpl
+class _DocumentImpl extends _NodeImpl
     implements Document
-    native "*HTMLHtmlElement" {
+    native "*HTMLDocument"
+    {
+
 
   _DocumentEventsImpl get on() =>
-    new _DocumentEventsImpl(_jsDocument);
+    new _DocumentEventsImpl(this);
 
-  _ElementImpl get activeElement() native "return this.parentNode.activeElement;";
+  final _ElementImpl activeElement;
 
-  _ElementImpl get body() native "return this.parentNode.body;";
+  _ElementImpl body;
 
-  void set body(_ElementImpl value) native "this.parentNode.body = value;";
+  String charset;
 
-  String get charset() native "return this.parentNode.charset;";
+  String cookie;
 
-  void set charset(String value) native "this.parentNode.charset = value;";
+  _WindowImpl get window() native "return this.defaultView;";
 
-  String get cookie() native "return this.parentNode.cookie;";
+  final _ElementImpl documentElement;
 
-  void set cookie(String value) native "this.parentNode.cookie = value;";
+  final String domain;
 
-  _WindowImpl get window() native "return this.parentNode.defaultView;";
+  final _HeadElementImpl head;
 
-  String get domain() native "return this.parentNode.domain;";
+  final String lastModified;
 
-  _HeadElementImpl get head() native "return this.parentNode.head;";
+  final String preferredStylesheetSet;
 
-  String get lastModified() native "return this.parentNode.lastModified;";
+  final String readyState;
 
-  String get preferredStylesheetSet() native "return this.parentNode.preferredStylesheetSet;";
+  final String referrer;
 
-  String get readyState() native "return this.parentNode.readyState;";
+  String selectedStylesheetSet;
 
-  String get referrer() native "return this.parentNode.referrer;";
+  final _StyleSheetListImpl styleSheets;
 
-  String get selectedStylesheetSet() native "return this.parentNode.selectedStylesheetSet;";
+  String title;
 
-  void set selectedStylesheetSet(String value) native "this.parentNode.selectedStylesheetSet = value;";
+  final _ElementImpl webkitCurrentFullScreenElement;
 
-  _StyleSheetListImpl get styleSheets() native "return this.parentNode.styleSheets;";
+  final bool webkitFullScreenKeyboardInputAllowed;
 
-  String get title() native "return this.parentNode.title;";
+  final _ElementImpl webkitFullscreenElement;
 
-  void set title(String value) native "this.parentNode.title = value;";
+  final bool webkitFullscreenEnabled;
 
-  _ElementImpl get webkitCurrentFullScreenElement() native "return this.parentNode.webkitCurrentFullScreenElement;";
+  final bool webkitHidden;
 
-  bool get webkitFullScreenKeyboardInputAllowed() native "return this.parentNode.webkitFullScreenKeyboardInputAllowed;";
+  final bool webkitIsFullScreen;
 
-  _ElementImpl get webkitFullscreenElement() native "return this.parentNode.webkitFullscreenElement;";
+  final String webkitVisibilityState;
 
-  bool get webkitFullscreenEnabled() native "return this.parentNode.webkitFullscreenEnabled;";
+  _RangeImpl caretRangeFromPoint(int x, int y) native;
 
-  bool get webkitHidden() native "return this.parentNode.webkitHidden;";
+  _CDATASectionImpl createCDATASection(String data) native;
 
-  bool get webkitIsFullScreen() native "return this.parentNode.webkitIsFullScreen;";
+  _DocumentFragmentImpl createDocumentFragment() native;
 
-  String get webkitVisibilityState() native "return this.parentNode.webkitVisibilityState;";
+  _ElementImpl $dom_createElement(String tagName) native "createElement";
 
-  _RangeImpl caretRangeFromPoint(int x, int y) native "return this.parentNode.caretRangeFromPoint(x, y);";
+  _ElementImpl $dom_createElementNS(String namespaceURI, String qualifiedName) native "createElementNS";
 
-  _CDATASectionImpl createCDATASection(String data) native "return this.parentNode.createCDATASection(data);";
+  _EventImpl $dom_createEvent(String eventType) native "createEvent";
 
-  _DocumentFragmentImpl createDocumentFragment() native "return this.parentNode.createDocumentFragment();";
+  _RangeImpl createRange() native;
 
-  _ElementImpl _createElement(String tagName) native "return this.parentNode.createElement(tagName);";
+  _TextImpl $dom_createTextNode(String data) native "createTextNode";
 
-  _ElementImpl _createElementNS(String namespaceURI, String qualifiedName) native "return this.parentNode.createElementNS(namespaceURI, qualifiedName);";
+  _TouchImpl createTouch(_WindowImpl window, _EventTargetImpl target, int identifier, int pageX, int pageY, int screenX, int screenY, int webkitRadiusX, int webkitRadiusY, num webkitRotationAngle, num webkitForce) native;
 
-  _EventImpl _createEvent(String eventType) native "return this.parentNode.createEvent(eventType);";
+  _TouchListImpl $dom_createTouchList() native "createTouchList";
 
-  _RangeImpl createRange() native "return this.parentNode.createRange();";
+  _ElementImpl elementFromPoint(int x, int y) native;
 
-  _TextImpl _createTextNode(String data) native "return this.parentNode.createTextNode(data);";
+  bool execCommand(String command, bool userInterface, String value) native;
 
-  _TouchImpl createTouch(_WindowImpl window, _EventTargetImpl target, int identifier, int pageX, int pageY, int screenX, int screenY, int webkitRadiusX, int webkitRadiusY, num webkitRotationAngle, num webkitForce) native "return this.parentNode.createTouch(window, target, identifier, pageX, pageY, screenX, screenY, webkitRadiusX, webkitRadiusY, webkitRotationAngle, webkitForce);";
+  _CanvasRenderingContextImpl getCSSCanvasContext(String contextId, String name, int width, int height) native;
 
-  _TouchListImpl _createTouchList() native "return this.parentNode.createTouchList();";
+  _ElementImpl $dom_getElementById(String elementId) native "getElementById";
 
-  _ElementImpl elementFromPoint(int x, int y) native "return this.parentNode.elementFromPoint(x, y);";
+  _NodeListImpl $dom_getElementsByClassName(String tagname) native "getElementsByClassName";
 
-  bool execCommand(String command, bool userInterface, String value) native "return this.parentNode.execCommand(command, userInterface, value);";
+  _NodeListImpl $dom_getElementsByName(String elementName) native "getElementsByName";
 
-  _CanvasRenderingContextImpl getCSSCanvasContext(String contextId, String name, int width, int height) native "return this.parentNode.getCSSCanvasContext(contextId, name, width, height);";
+  _NodeListImpl $dom_getElementsByTagName(String tagname) native "getElementsByTagName";
 
-  bool queryCommandEnabled(String command) native "return this.parentNode.queryCommandEnabled(command);";
+  bool queryCommandEnabled(String command) native;
 
-  bool queryCommandIndeterm(String command) native "return this.parentNode.queryCommandIndeterm(command);";
+  bool queryCommandIndeterm(String command) native;
 
-  bool queryCommandState(String command) native "return this.parentNode.queryCommandState(command);";
+  bool queryCommandState(String command) native;
 
-  bool queryCommandSupported(String command) native "return this.parentNode.queryCommandSupported(command);";
+  bool queryCommandSupported(String command) native;
 
-  String queryCommandValue(String command) native "return this.parentNode.queryCommandValue(command);";
+  String queryCommandValue(String command) native;
 
-  void webkitCancelFullScreen() native "this.parentNode.webkitCancelFullScreen();";
+  _ElementImpl _query(String selectors) native "querySelector";
 
-  void webkitExitFullscreen() native "this.parentNode.webkitExitFullscreen();";
+  _NodeListImpl $dom_querySelectorAll(String selectors) native "querySelectorAll";
 
-  _WebKitNamedFlowImpl webkitGetFlowByName(String name) native "return this.parentNode.webkitGetFlowByName(name);";
+  void webkitCancelFullScreen() native;
 
+  void webkitExitFullscreen() native;
 
-  // For efficiency and simplicity, we always use the HtmlElement as the
-  // Document but sometimes internally we need the real JS document object.
-  _NodeImpl get _jsDocument() native "return this.parentNode;";
+  _WebKitNamedFlowImpl webkitGetFlowByName(String name) native;
 
-  // The document doesn't have a parent element.
-  _ElementImpl get parent() => null;
-}
+  // TODO(jacobr): implement all Element methods not on Document. 
 
-// This class should not be externally visible.  If a user ever gets access to
-// a _SecretHtmlDocumentImpl object that is a bug.  This object is hidden by
-// adding checks to all methods that could an HTMLDocument.  We believe that
-// list is limited to Event.target, and HTMLHtmlElement.parent.
-class _SecretHtmlDocumentImpl extends _NodeImpl implements Node
-    native "*HTMLDocument" {
-  _DocumentImpl get _documentElement() native "return this.documentElement;";
-}
+  _ElementImpl query(String selectors) {
+    // It is fine for our RegExp to detect element id query selectors to have
+    // false negatives but not false positives.
+    if (const RegExp("^#[_a-zA-Z]\\w*\$").hasMatch(selectors)) {
+      return $dom_getElementById(selectors.substring(1));
+    }
+    return $dom_querySelector(selectors);
+  }
 
-EventTarget _FixHtmlDocumentReference(EventTarget eventTarget) {
-  if (eventTarget is _SecretHtmlDocumentImpl) {
-    _SecretHtmlDocumentImpl secretDocument = eventTarget;
-    return secretDocument._documentElement;
-  } else {
-    return eventTarget;
+// TODO(jacobr): autogenerate this method.
+  _ElementImpl $dom_querySelector(String selectors) native "return this.querySelector(selectors);";
+
+  ElementList queryAll(String selectors) {
+    if (const RegExp("""^\\[name=["'][^'"]+['"]\\]\$""").hasMatch(selectors)) {
+      final mutableMatches = $dom_getElementsByName(
+          selectors.substring(7,selectors.length - 2));
+      int len = mutableMatches.length;
+      final copyOfMatches = new List<Element>(len);
+      for (int i = 0; i < len; ++i) {
+        copyOfMatches[i] = mutableMatches[i];
+      }
+      return new _FrozenElementList._wrap(copyOfMatches);
+    } else if (const RegExp("^[*a-zA-Z0-9]+\$").hasMatch(selectors)) {
+      final mutableMatches = $dom_getElementsByTagName(selectors);
+      int len = mutableMatches.length;
+      final copyOfMatches = new List<Element>(len);
+      for (int i = 0; i < len; ++i) {
+        copyOfMatches[i] = mutableMatches[i];
+      }
+      return new _FrozenElementList._wrap(copyOfMatches);
+    } else {
+      return new _FrozenElementList._wrap($dom_querySelectorAll(selectors));
+    }
   }
 }
 
@@ -4971,15 +4950,15 @@ class FilteredElementList implements ElementList {
     throw const NotImplementedException();
   }
 
-  void setRange(int start, int length, List from, [int startFrom = 0]) {
+  void setRange(int start, int rangeLength, List from, [int startFrom = 0]) {
     throw const NotImplementedException();
   }
 
-  void removeRange(int start, int length) {
-    _filtered.getRange(start, length).forEach((el) => el.remove());
+  void removeRange(int start, int rangeLength) {
+    _filtered.getRange(start, rangeLength).forEach((el) => el.remove());
   }
 
-  void insertRange(int start, int length, [initialValue = null]) {
+  void insertRange(int start, int rangeLength, [initialValue = null]) {
     throw const NotImplementedException();
   }
 
@@ -4990,11 +4969,11 @@ class FilteredElementList implements ElementList {
   }
 
   Element removeLast() {
-    final last = this.last();
-    if (last != null) {
-      last.remove();
+    final result = this.last();
+    if (result != null) {
+      result.remove();
     }
-    return last;
+    return result;
   }
 
   Collection map(f(Element element)) => _filtered.map(f);
@@ -5005,8 +4984,8 @@ class FilteredElementList implements ElementList {
   int get length() => _filtered.length;
   Element operator [](int index) => _filtered[index];
   Iterator<Element> iterator() => _filtered.iterator();
-  List<Element> getRange(int start, int length) =>
-    _filtered.getRange(start, length);
+  List<Element> getRange(int start, int rangeLength) =>
+    _filtered.getRange(start, rangeLength);
   int indexOf(Element element, [int start = 0]) =>
     _filtered.indexOf(element, start);
 
@@ -5053,7 +5032,7 @@ class _DocumentFragmentImpl extends _NodeImpl implements DocumentFragment native
   }
 
   ElementList queryAll(String selectors) =>
-    new _FrozenElementList._wrap(_querySelectorAll(selectors));
+    new _FrozenElementList._wrap($dom_querySelectorAll(selectors));
 
   String get innerHTML() {
     final e = new Element.tag("div");
@@ -5122,8 +5101,8 @@ class _DocumentFragmentImpl extends _NodeImpl implements DocumentFragment native
   String get tagName() => "";
   String get webkitdropzone() => "";
   String get webkitRegionOverflow() => "";
-  Element get firstElementChild() => elements.first();
-  Element get lastElementChild() => elements.last();
+  Element get $dom_firstElementChild() => elements.first();
+  Element get $dom_lastElementChild() => elements.last();
   Element get nextElementSibling() => null;
   Element get previousElementSibling() => null;
   Element get offsetParent() => null;
@@ -5251,9 +5230,9 @@ class _DocumentFragmentImpl extends _NodeImpl implements DocumentFragment native
   _ElementEventsImpl get on() =>
     new _ElementEventsImpl(this);
 
-  _ElementImpl query(String selectors) native "return this.querySelector(selectors);";
+  _ElementImpl query(String selectors) native "querySelector";
 
-  _NodeListImpl _querySelectorAll(String selectors) native "return this.querySelectorAll(selectors);";
+  _NodeListImpl $dom_querySelectorAll(String selectors) native "querySelectorAll";
 
 }
 
@@ -5301,7 +5280,7 @@ class _ChildrenElementList implements ElementList {
   final _HTMLCollectionImpl _childElements;
 
   _ChildrenElementList._wrap(_ElementImpl element)
-    : _childElements = element._children,
+    : _childElements = element.$dom_children,
       _element = element;
 
   List<Element> _toList() {
@@ -5313,7 +5292,7 @@ class _ChildrenElementList implements ElementList {
   }
 
   _ElementImpl get first() {
-    return _element._firstElementChild;
+    return _element.$dom_firstElementChild;
   }
 
   void forEach(void f(Element element)) {
@@ -5359,7 +5338,7 @@ class _ChildrenElementList implements ElementList {
   }
 
   bool isEmpty() {
-    return _element._firstElementChild == null;
+    return _element.$dom_firstElementChild == null;
   }
 
   int get length() {
@@ -5371,7 +5350,7 @@ class _ChildrenElementList implements ElementList {
   }
 
   void operator []=(int index, _ElementImpl value) {
-    _element._replaceChild(value, _childElements[index]);
+    _element.$dom_replaceChild(value, _childElements[index]);
   }
 
    void set length(int newLength) {
@@ -5380,7 +5359,7 @@ class _ChildrenElementList implements ElementList {
    }
 
   Element add(_ElementImpl value) {
-    _element._appendChild(value);
+    _element.$dom_appendChild(value);
     return value;
   }
 
@@ -5390,7 +5369,7 @@ class _ChildrenElementList implements ElementList {
 
   void addAll(Collection<Element> collection) {
     for (_ElementImpl element in collection) {
-      _element._appendChild(element);
+      _element.$dom_appendChild(element);
     }
   }
 
@@ -5402,20 +5381,20 @@ class _ChildrenElementList implements ElementList {
     throw 'Not impl yet. todo(jacobr)';
   }
 
-  void setRange(int start, int length, List from, [int startFrom = 0]) {
+  void setRange(int start, int rangeLength, List from, [int startFrom = 0]) {
     throw const NotImplementedException();
   }
 
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw const NotImplementedException();
   }
 
-  void insertRange(int start, int length, [initialValue = null]) {
+  void insertRange(int start, int rangeLength, [initialValue = null]) {
     throw const NotImplementedException();
   }
 
-  List getRange(int start, int length) =>
-    new _FrozenElementList._wrap(_Lists.getRange(this, start, length,
+  List getRange(int start, int rangeLength) =>
+    new _FrozenElementList._wrap(_Lists.getRange(this, start, rangeLength,
         <Element>[]));
 
   int indexOf(Element element, [int start = 0]) {
@@ -5433,15 +5412,15 @@ class _ChildrenElementList implements ElementList {
   }
 
   Element removeLast() {
-    final last = this.last();
-    if (last != null) {
-      _element._removeChild(last);
+    final result = this.last();
+    if (result != null) {
+      _element.$dom_removeChild(result);
     }
-    return last;
+    return result;
   }
 
   Element last() {
-    return _element.lastElementChild;
+    return _element.$dom_lastElementChild;
   }
 }
 
@@ -5530,20 +5509,20 @@ class _FrozenElementList implements ElementList {
     throw const UnsupportedOperationException('');
   }
 
-  void setRange(int start, int length, List from, [int startFrom = 0]) {
+  void setRange(int start, int rangeLength, List from, [int startFrom = 0]) {
     throw const UnsupportedOperationException('');
   }
 
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw const UnsupportedOperationException('');
   }
 
-  void insertRange(int start, int length, [initialValue = null]) {
+  void insertRange(int start, int rangeLength, [initialValue = null]) {
     throw const UnsupportedOperationException('');
   }
 
-  ElementList getRange(int start, int length) =>
-    new _FrozenElementList._wrap(_nodeList.getRange(start, length));
+  ElementList getRange(int start, int rangeLength) =>
+    new _FrozenElementList._wrap(_nodeList.getRange(start, rangeLength));
 
   int indexOf(Element element, [int start = 0]) =>
     _nodeList.indexOf(element, start);
@@ -5592,18 +5571,18 @@ class _ElementList extends _ListWrapper<Element> implements ElementList {
   ElementList filter(bool f(Element element)) =>
     new _ElementList(super.filter(f));
 
-  ElementList getRange(int start, int length) =>
-    new _ElementList(super.getRange(start, length));
+  ElementList getRange(int start, int rangeLength) =>
+    new _ElementList(super.getRange(start, rangeLength));
 }
 
-class ElementAttributeMap implements Map<String, String> {
+class _ElementAttributeMap implements AttributeMap {
 
   final _ElementImpl _element;
 
-  ElementAttributeMap._wrap(this._element);
+  _ElementAttributeMap(this._element);
 
   bool containsValue(String value) {
-    final attributes = _element._attributes;
+    final attributes = _element.$dom_attributes;
     for (int i = 0, len = attributes.length; i < len; i++) {
       if(value == attributes[i].value) {
         return true;
@@ -5613,15 +5592,15 @@ class ElementAttributeMap implements Map<String, String> {
   }
 
   bool containsKey(String key) {
-    return _element._hasAttribute(key);
+    return _element.$dom_hasAttribute(key);
   }
 
   String operator [](String key) {
-    return _element._getAttribute(key);
+    return _element.$dom_getAttribute(key);
   }
 
-  void operator []=(String key, String value) {
-    _element._setAttribute(key, value);
+  void operator []=(String key, value) {
+    _element.$dom_setAttribute(key, '$value');
   }
 
   String putIfAbsent(String key, String ifAbsent()) {
@@ -5631,18 +5610,18 @@ class ElementAttributeMap implements Map<String, String> {
   }
 
   String remove(String key) {
-    _element._removeAttribute(key);
+    _element.$dom_removeAttribute(key);
   }
 
   void clear() {
-    final attributes = _element._attributes;
+    final attributes = _element.$dom_attributes;
     for (int i = attributes.length - 1; i >= 0; i--) {
       remove(attributes[i].name);
     }
   }
 
   void forEach(void f(String key, String value)) {
-    final attributes = _element._attributes;
+    final attributes = _element.$dom_attributes;
     for (int i = 0, len = attributes.length; i < len; i++) {
       final item = attributes[i];
       f(item.name, item.value);
@@ -5651,7 +5630,7 @@ class ElementAttributeMap implements Map<String, String> {
 
   Collection<String> getKeys() {
     // TODO(jacobr): generate a lazy collection instead.
-    final attributes = _element._attributes;
+    final attributes = _element.$dom_attributes;
     final keys = new List<String>(attributes.length);
     for (int i = 0, len = attributes.length; i < len; i++) {
       keys[i] = attributes[i].name;
@@ -5661,7 +5640,7 @@ class ElementAttributeMap implements Map<String, String> {
 
   Collection<String> getValues() {
     // TODO(jacobr): generate a lazy collection instead.
-    final attributes = _element._attributes;
+    final attributes = _element.$dom_attributes;
     final values = new List<String>(attributes.length);
     for (int i = 0, len = attributes.length; i < len; i++) {
       values[i] = attributes[i].value;
@@ -5673,7 +5652,7 @@ class ElementAttributeMap implements Map<String, String> {
    * The number of {key, value} pairs in the map.
    */
   int get length() {
-    return _element._attributes.length;
+    return _element.$dom_attributes.length;
   }
 
   /**
@@ -5681,6 +5660,203 @@ class ElementAttributeMap implements Map<String, String> {
    */
   bool isEmpty() {
     return length == 0;
+  }
+}
+
+/**
+ * Provides a Map abstraction on top of data-* attributes, similar to the
+ * dataSet in the old DOM.
+ */
+class _DataAttributeMap implements AttributeMap {
+
+  final Map<String, String> $dom_attributes;
+
+  _DataAttributeMap(this.$dom_attributes);
+
+  // interface Map
+
+  // TODO: Use lazy iterator when it is available on Map.
+  bool containsValue(String value) => getValues().some((v) => v == value);
+
+  bool containsKey(String key) => $dom_attributes.containsKey(_attr(key));
+
+  String operator [](String key) => $dom_attributes[_attr(key)];
+
+  void operator []=(String key, value) {
+    $dom_attributes[_attr(key)] = '$value';
+  }
+
+  String putIfAbsent(String key, String ifAbsent()) {
+    $dom_attributes.putIfAbsent(_attr(key), ifAbsent);
+  }
+
+  String remove(String key) => $dom_attributes.remove(_attr(key));
+
+  void clear() {
+    // Needs to operate on a snapshot since we are mutating the collection.
+    for (String key in getKeys()) {
+      remove(key);
+    }
+  }
+
+  void forEach(void f(String key, String value)) {
+    $dom_attributes.forEach((String key, String value) {
+      if (_matches(key)) {
+        f(_strip(key), value);
+      }
+    });
+  }
+
+  Collection<String> getKeys() {
+    final keys = new List<String>();
+    $dom_attributes.forEach((String key, String value) {
+      if (_matches(key)) {
+        keys.add(_strip(key));
+      }
+    });
+    return keys;
+  }
+
+  Collection<String> getValues() {
+    final values = new List<String>();
+    $dom_attributes.forEach((String key, String value) {
+      if (_matches(key)) {
+        values.add(value);
+      }
+    });
+    return values;
+  }
+
+  int get length() => getKeys().length;
+
+  // TODO: Use lazy iterator when it is available on Map.
+  bool isEmpty() => length == 0;
+
+  // Helpers.
+  String _attr(String key) => 'data-$key';
+  bool _matches(String key) => key.startsWith('data-');
+  String _strip(String key) => key.substring(5);
+}
+
+class _CssClassSet implements Set<String> {
+
+  final _ElementImpl _element;
+
+  _CssClassSet(this._element);
+
+  String toString() => _formatSet(_read());
+
+  // interface Iterable - BEGIN
+  Iterator<String> iterator() => _read().iterator();
+  // interface Iterable - END
+
+  // interface Collection - BEGIN
+  void forEach(void f(String element)) {
+    _read().forEach(f);
+  }
+
+  Collection map(f(String element)) => _read().map(f);
+
+  Collection<String> filter(bool f(String element)) => _read().filter(f);
+
+  bool every(bool f(String element)) => _read().every(f);
+
+  bool some(bool f(String element)) => _read().some(f);
+
+  bool isEmpty() => _read().isEmpty();
+
+  int get length() =>_read().length;
+
+  // interface Collection - END
+
+  // interface Set - BEGIN
+  bool contains(String value) => _read().contains(value);
+
+  void add(String value) {
+    // TODO - figure out if we need to do any validation here
+    // or if the browser natively does enough
+    _modify((s) => s.add(value));
+  }
+
+  bool remove(String value) {
+    Set<String> s = _read();
+    bool result = s.remove(value);
+    _write(s);
+    return result;
+  }
+
+  void addAll(Collection<String> collection) {
+    // TODO - see comment above about validation
+    _modify((s) => s.addAll(collection));
+  }
+
+  void removeAll(Collection<String> collection) {
+    _modify((s) => s.removeAll(collection));
+  }
+
+  bool isSubsetOf(Collection<String> collection) =>
+    _read().isSubsetOf(collection);
+
+  bool containsAll(Collection<String> collection) =>
+    _read().containsAll(collection);
+
+  Set<String> intersection(Collection<String> other) =>
+    _read().intersection(other);
+
+  void clear() {
+    _modify((s) => s.clear());
+  }
+  // interface Set - END
+
+  /**
+   * Helper method used to modify the set of css classes on this element.
+   *
+   *   f - callback with:
+   *      s - a Set of all the css class name currently on this element.
+   *
+   *   After f returns, the modified set is written to the
+   *       className property of this element.
+   */
+  void _modify( f(Set<String> s)) {
+    Set<String> s = _read();
+    f(s);
+    _write(s);
+  }
+
+  /**
+   * Read the class names from the Element class property,
+   * and put them into a set (duplicates are discarded).
+   */
+  Set<String> _read() {
+    // TODO(mattsh) simplify this once split can take regex.
+    Set<String> s = new Set<String>();
+    for (String name in _classname().split(' ')) {
+      String trimmed = name.trim();
+      if (!trimmed.isEmpty()) {
+        s.add(trimmed);
+      }
+    }
+    return s;
+  }
+
+  /**
+   * Read the class names as a space-separated string. This is meant to be
+   * overridden by subclasses.
+   */
+  String _classname() => _element.$dom_className;
+
+  /**
+   * Join all the elements of a set into one string and write
+   * back to the element.
+   */
+  void _write(Set s) {
+    _element.$dom_className = _formatSet(s);
+  }
+
+  String _formatSet(Set<String> s) {
+    // TODO(mattsh) should be able to pass Set to String.joins http:/b/5398605
+    List list = new List.from(s);
+    return Strings.join(list, ' ');
   }
 }
 
@@ -5720,20 +5896,20 @@ class _ElementRectImpl implements ElementRect {
   final _ClientRectListImpl _clientRects;
 
   _ElementRectImpl(_ElementImpl element) :
-    client = new _SimpleClientRect(element._clientLeft,
-                                  element._clientTop,
-                                  element._clientWidth, 
-                                  element._clientHeight), 
-    offset = new _SimpleClientRect(element._offsetLeft,
-                                  element._offsetTop,
-                                  element._offsetWidth,
-                                  element._offsetHeight),
-    scroll = new _SimpleClientRect(element._scrollLeft,
-                                  element._scrollTop,
-                                  element._scrollWidth,
-                                  element._scrollHeight),
-    _boundingClientRect = element._getBoundingClientRect(),
-    _clientRects = element._getClientRects();
+    client = new _SimpleClientRect(element.$dom_clientLeft,
+                                  element.$dom_clientTop,
+                                  element.$dom_clientWidth, 
+                                  element.$dom_clientHeight), 
+    offset = new _SimpleClientRect(element.$dom_offsetLeft,
+                                  element.$dom_offsetTop,
+                                  element.$dom_offsetWidth,
+                                  element.$dom_offsetHeight),
+    scroll = new _SimpleClientRect(element.$dom_scrollLeft,
+                                  element.$dom_scrollTop,
+                                  element.$dom_scrollWidth,
+                                  element.$dom_scrollHeight),
+    _boundingClientRect = element.$dom_getBoundingClientRect(),
+    _clientRects = element.$dom_getClientRects();
 
   _ClientRectImpl get bounding() => _boundingClientRect;
 
@@ -5749,21 +5925,11 @@ class _ElementRectImpl implements ElementRect {
 
 class _ElementImpl extends _NodeImpl implements Element native "*Element" {
 
-  // TODO(jacobr): caching these may hurt performance.
-  ElementAttributeMap _elementAttributeMap;
-  _CssClassSet _cssClassSet;
-  _DataAttributeMap _dataAttributes;
-
   /**
    * @domName Element.hasAttribute, Element.getAttribute, Element.setAttribute,
    *   Element.removeAttribute
    */
-  Map<String, String> get attributes() {
-    if (_elementAttributeMap === null) {
-      _elementAttributeMap = new ElementAttributeMap._wrap(this);
-    }
-    return _elementAttributeMap;
-  }
+  _ElementAttributeMap get attributes() => new _ElementAttributeMap(this);
 
   void set attributes(Map<String, String> value) {
     Map<String, String> attributes = this.attributes;
@@ -5782,14 +5948,9 @@ class _ElementImpl extends _NodeImpl implements Element native "*Element" {
   ElementList get elements() => new _ChildrenElementList._wrap(this);
 
   ElementList queryAll(String selectors) =>
-    new _FrozenElementList._wrap(_querySelectorAll(selectors));
+    new _FrozenElementList._wrap($dom_querySelectorAll(selectors));
 
-  Set<String> get classes() {
-    if (_cssClassSet === null) {
-      _cssClassSet = new _CssClassSet(this);
-    }
-    return _cssClassSet;
-  }
+  _CssClassSet get classes() => new _CssClassSet(this);
 
   void set classes(Collection<String> value) {
     _CssClassSet classSet = classes;
@@ -5797,15 +5958,11 @@ class _ElementImpl extends _NodeImpl implements Element native "*Element" {
     classSet.addAll(value);
   }
 
-  Map<String, String> get dataAttributes() {
-    if (_dataAttributes === null) {
-      _dataAttributes = new _DataAttributeMap(attributes);
-    }
-    return _dataAttributes;
-  }
+  Map<String, String> get dataAttributes() =>
+    new _DataAttributeMap(attributes);
 
   void set dataAttributes(Map<String, String> value) {
-    Map<String, String> dataAttributes = this.dataAttributes;
+    final dataAttributes = this.dataAttributes;
     dataAttributes.clear();
     for (String key in value.getKeys()) {
       dataAttributes[key] = value[key];
@@ -5825,7 +5982,7 @@ class _ElementImpl extends _NodeImpl implements Element native "*Element" {
 
   Future<CSSStyleDeclaration> getComputedStyle(String pseudoElement) {
     return _createMeasurementFuture(
-        () => _window._getComputedStyle(this, pseudoElement),
+        () => _window.$dom_getComputedStyle(this, pseudoElement),
         new Completer<CSSStyleDeclaration>());
   }
 
@@ -5834,21 +5991,21 @@ class _ElementImpl extends _NodeImpl implements Element native "*Element" {
 
   static final int ALLOW_KEYBOARD_INPUT = 1;
 
-  int get _childElementCount() native "return this.childElementCount;";
+  int get $dom_childElementCount() native "return this.childElementCount;";
 
-  _HTMLCollectionImpl get _children() native "return this.children;";
+  _HTMLCollectionImpl get $dom_children() native "return this.children;";
 
-  String get _className() native "return this.className;";
+  String get $dom_className() native "return this.className;";
 
-  void set _className(String value) native "this.className = value;";
+  void set $dom_className(String value) native "this.className = value;";
 
-  int get _clientHeight() native "return this.clientHeight;";
+  int get $dom_clientHeight() native "return this.clientHeight;";
 
-  int get _clientLeft() native "return this.clientLeft;";
+  int get $dom_clientLeft() native "return this.clientLeft;";
 
-  int get _clientTop() native "return this.clientTop;";
+  int get $dom_clientTop() native "return this.clientTop;";
 
-  int get _clientWidth() native "return this.clientWidth;";
+  int get $dom_clientWidth() native "return this.clientWidth;";
 
   String contentEditable;
 
@@ -5856,7 +6013,7 @@ class _ElementImpl extends _NodeImpl implements Element native "*Element" {
 
   bool draggable;
 
-  _ElementImpl get _firstElementChild() native "return this.firstElementChild;";
+  _ElementImpl get $dom_firstElementChild() native "return this.firstElementChild;";
 
   bool hidden;
 
@@ -5868,35 +6025,35 @@ class _ElementImpl extends _NodeImpl implements Element native "*Element" {
 
   String lang;
 
-  final _ElementImpl lastElementChild;
+  _ElementImpl get $dom_lastElementChild() native "return this.lastElementChild;";
 
   final _ElementImpl nextElementSibling;
 
-  int get _offsetHeight() native "return this.offsetHeight;";
+  int get $dom_offsetHeight() native "return this.offsetHeight;";
 
-  int get _offsetLeft() native "return this.offsetLeft;";
+  int get $dom_offsetLeft() native "return this.offsetLeft;";
 
   final _ElementImpl offsetParent;
 
-  int get _offsetTop() native "return this.offsetTop;";
+  int get $dom_offsetTop() native "return this.offsetTop;";
 
-  int get _offsetWidth() native "return this.offsetWidth;";
+  int get $dom_offsetWidth() native "return this.offsetWidth;";
 
   final String outerHTML;
 
   final _ElementImpl previousElementSibling;
 
-  int get _scrollHeight() native "return this.scrollHeight;";
+  int get $dom_scrollHeight() native "return this.scrollHeight;";
 
-  int get _scrollLeft() native "return this.scrollLeft;";
+  int get $dom_scrollLeft() native "return this.scrollLeft;";
 
-  void set _scrollLeft(int value) native "this.scrollLeft = value;";
+  void set $dom_scrollLeft(int value) native "this.scrollLeft = value;";
 
-  int get _scrollTop() native "return this.scrollTop;";
+  int get $dom_scrollTop() native "return this.scrollTop;";
 
-  void set _scrollTop(int value) native "this.scrollTop = value;";
+  void set $dom_scrollTop(int value) native "this.scrollTop = value;";
 
-  int get _scrollWidth() native "return this.scrollWidth;";
+  int get $dom_scrollWidth() native "return this.scrollWidth;";
 
   bool spellcheck;
 
@@ -5920,13 +6077,17 @@ class _ElementImpl extends _NodeImpl implements Element native "*Element" {
 
   void focus() native;
 
-  String _getAttribute(String name) native "return this.getAttribute(name);";
+  String $dom_getAttribute(String name) native "getAttribute";
 
-  _ClientRectImpl _getBoundingClientRect() native "return this.getBoundingClientRect();";
+  _ClientRectImpl $dom_getBoundingClientRect() native "getBoundingClientRect";
 
-  _ClientRectListImpl _getClientRects() native "return this.getClientRects();";
+  _ClientRectListImpl $dom_getClientRects() native "getClientRects";
 
-  bool _hasAttribute(String name) native "return this.hasAttribute(name);";
+  _NodeListImpl $dom_getElementsByClassName(String name) native "getElementsByClassName";
+
+  _NodeListImpl $dom_getElementsByTagName(String name) native "getElementsByTagName";
+
+  bool $dom_hasAttribute(String name) native "hasAttribute";
 
   _ElementImpl insertAdjacentElement(String where, _ElementImpl element) native;
 
@@ -5934,26 +6095,84 @@ class _ElementImpl extends _NodeImpl implements Element native "*Element" {
 
   void insertAdjacentText(String where, String text) native;
 
-  _ElementImpl query(String selectors) native "return this.querySelector(selectors);";
+  _ElementImpl query(String selectors) native "querySelector";
 
-  _NodeListImpl _querySelectorAll(String selectors) native "return this.querySelectorAll(selectors);";
+  _NodeListImpl $dom_querySelectorAll(String selectors) native "querySelectorAll";
 
-  void _removeAttribute(String name) native "this.removeAttribute(name);";
+  void $dom_removeAttribute(String name) native "removeAttribute";
 
   void scrollByLines(int lines) native;
 
   void scrollByPages(int pages) native;
 
-  void scrollIntoView([bool centerIfNeeded = null]) native "this.scrollIntoViewIfNeeded(centerIfNeeded);";
+  void scrollIntoView([bool centerIfNeeded = null]) native "scrollIntoViewIfNeeded";
 
-  void _setAttribute(String name, String value) native "this.setAttribute(name, value);";
+  void $dom_setAttribute(String name, String value) native "setAttribute";
 
-  bool matchesSelector(String selectors) native "return this.webkitMatchesSelector(selectors);";
+  bool matchesSelector(String selectors) native "webkitMatchesSelector";
 
   void webkitRequestFullScreen(int flags) native;
 
   void webkitRequestFullscreen() native;
 
+}
+
+final _START_TAG_REGEXP = const RegExp('<(\\w+)');
+class _ElementFactoryProvider {
+  static final _CUSTOM_PARENT_TAG_MAP = const {
+    'body' : 'html',
+    'head' : 'html',
+    'caption' : 'table',
+    'td': 'tr',
+    'colgroup': 'table',
+    'col' : 'colgroup',
+    'tr' : 'tbody',
+    'tbody' : 'table',
+    'tfoot' : 'table',
+    'thead' : 'table',
+    'track' : 'audio',
+  };
+
+  /** @domName Document.createElement */
+  factory Element.html(String html) {
+    // TODO(jacobr): this method can be made more robust and performant.
+    // 1) Cache the dummy parent elements required to use innerHTML rather than
+    //    creating them every call.
+    // 2) Verify that the html does not contain leading or trailing text nodes.
+    // 3) Verify that the html does not contain both <head> and <body> tags.
+    // 4) Detatch the created element from its dummy parent.
+    String parentTag = 'div';
+    String tag;
+    final match = _START_TAG_REGEXP.firstMatch(html);
+    if (match !== null) {
+      tag = match.group(1).toLowerCase();
+      if (_CUSTOM_PARENT_TAG_MAP.containsKey(tag)) {
+        parentTag = _CUSTOM_PARENT_TAG_MAP[tag];
+      }
+    }
+    final _ElementImpl temp = new Element.tag(parentTag);
+    temp.innerHTML = html;
+
+    Element element;
+    if (temp.elements.length == 1) {
+      element = temp.elements.first;
+    } else if (parentTag == 'html' && temp.elements.length == 2) {
+      // Work around for edge case in WebKit and possibly other browsers where
+      // both body and head elements are created even though the inner html
+      // only contains a head or body element.
+      element = temp.elements[tag == 'head' ? 0 : 1];
+    } else {
+      throw new IllegalArgumentException('HTML had ${temp.elements.length} ' +
+          'top level elements but 1 expected');
+    }
+    element.remove();
+    return element;
+  }
+
+  /** @domName Document.createElement */
+  // Optimization to improve performance until the frog compiler inlines this
+  // method.
+  factory Element.tag(String tag) native "return document.createElement(tag)";
 }
 
 class _ElementEventsImpl extends _EventsImpl implements ElementEvents {
@@ -6226,9 +6445,7 @@ class _EventImpl implements Event native "*Event" {
 
   final _ClipboardImpl clipboardData;
 
-  _EventTargetImpl get currentTarget() => _FixHtmlDocumentReference(_currentTarget);
-
-  _EventTargetImpl get _currentTarget() native "return this.currentTarget;";
+  final _EventTargetImpl currentTarget;
 
   final bool defaultPrevented;
 
@@ -6236,19 +6453,15 @@ class _EventImpl implements Event native "*Event" {
 
   bool returnValue;
 
-  _EventTargetImpl get srcElement() => _FixHtmlDocumentReference(_srcElement);
+  final _EventTargetImpl srcElement;
 
-  _EventTargetImpl get _srcElement() native "return this.srcElement;";
-
-  _EventTargetImpl get target() => _FixHtmlDocumentReference(_target);
-
-  _EventTargetImpl get _target() native "return this.target;";
+  final _EventTargetImpl target;
 
   final int timeStamp;
 
   final String type;
 
-  void _initEvent(String eventTypeArg, bool canBubbleArg, bool cancelableArg) native "this.initEvent(eventTypeArg, canBubbleArg, cancelableArg);";
+  void $dom_initEvent(String eventTypeArg, bool canBubbleArg, bool cancelableArg) native "initEvent";
 
   void preventDefault() native;
 
@@ -6289,13 +6502,13 @@ class _EventSourceImpl extends _EventTargetImpl implements EventSource native "*
 
   final String url;
 
-  void _addEventListener(String type, EventListener listener, [bool useCapture = null]) native "this.addEventListener(type, listener, useCapture);";
+  void $dom_addEventListener(String type, EventListener listener, [bool useCapture = null]) native "addEventListener";
 
   void close() native;
 
-  bool _dispatchEvent(_EventImpl evt) native "return this.dispatchEvent(evt);";
+  bool $dom_dispatchEvent(_EventImpl evt) native "dispatchEvent";
 
-  void _removeEventListener(String type, EventListener listener, [bool useCapture = null]) native "this.removeEventListener(type, listener, useCapture);";
+  void $dom_removeEventListener(String type, EventListener listener, [bool useCapture = null]) native "removeEventListener";
 }
 
 class _EventSourceEventsImpl extends _EventsImpl implements EventSourceEvents {
@@ -6315,7 +6528,7 @@ class _EventsImpl implements Events {
   /* Raw event target. */
   // TODO(jacobr): it would be nice if we could specify this as
   // _EventTargetImpl or EventTarget
-  final var _ptr;
+  final Dynamic _ptr;
 
   _EventsImpl(this._ptr);
 
@@ -6329,7 +6542,7 @@ class _EventsImpl implements Events {
 class _EventListenerListImpl implements EventListenerList {
   
   // TODO(jacobr): make this _EventTargetImpl
-  final var _ptr;
+  final Dynamic _ptr;
   final String _type;
 
   _EventListenerListImpl(this._ptr, this._type);
@@ -6352,15 +6565,15 @@ class _EventListenerListImpl implements EventListenerList {
     // TODO(jacobr): what is the correct behavior here. We could alternately
     // force the event to have the expected type.
     assert(evt.type == _type);
-    return _ptr._dispatchEvent(evt);
+    return _ptr.$dom_dispatchEvent(evt);
   }
 
   void _add(EventListener listener, bool useCapture) {
-    _ptr._addEventListener(_type, listener, useCapture);
+    _ptr.$dom_addEventListener(_type, listener, useCapture);
   }
 
   void _remove(EventListener listener, bool useCapture) {
-    _ptr._removeEventListener(_type, listener, useCapture);
+    _ptr.$dom_removeEventListener(_type, listener, useCapture);
   }
 }
 
@@ -6369,11 +6582,11 @@ class _EventTargetImpl implements EventTarget native "*EventTarget" {
 
   Events get on() => new _EventsImpl(this);
 
-  void _addEventListener(String type, EventListener listener, [bool useCapture = null]) native "this.addEventListener(type, listener, useCapture);";
+  void $dom_addEventListener(String type, EventListener listener, [bool useCapture = null]) native "addEventListener";
 
-  bool _dispatchEvent(_EventImpl event) native "return this.dispatchEvent(event);";
+  bool $dom_dispatchEvent(_EventImpl event) native "dispatchEvent";
 
-  void _removeEventListener(String type, EventListener listener, [bool useCapture = null]) native "this.removeEventListener(type, listener, useCapture);";
+  void $dom_removeEventListener(String type, EventListener listener, [bool useCapture = null]) native "removeEventListener";
 
 }
 
@@ -6596,14 +6809,6 @@ class _FileWriterSyncImpl implements FileWriterSync native "*FileWriterSync" {
 
 class _Float32ArrayImpl extends _ArrayBufferViewImpl implements Float32Array, List<num> native "*Float32Array" {
 
-  factory Float32Array(int length) =>  _construct_Float32Array(length);
-
-  factory Float32Array.fromList(List<num> list) => _construct_Float32Array(list);
-
-  factory Float32Array.fromBuffer(ArrayBuffer buffer) => _construct_Float32Array(buffer);
-
-  static _construct_Float32Array(arg) native 'return new Float32Array(arg);';
-
   static final int BYTES_PER_ELEMENT = 4;
 
   final int length;
@@ -6664,35 +6869,27 @@ class _Float32ArrayImpl extends _ArrayBufferViewImpl implements Float32Array, Li
 
   num last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<num> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<num> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [num initialValue]) {
+  void insertRange(int start, int rangeLength, [num initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<num> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <num>[]);
+  List<num> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <num>[]);
 
   // -- end List<num> mixins.
 
-  void setElements(Object array, [int offset = null]) native;
+  void setElements(Object array, [int offset = null]) native "set";
 
   _Float32ArrayImpl subarray(int start, [int end = null]) native;
 }
 
 class _Float64ArrayImpl extends _ArrayBufferViewImpl implements Float64Array, List<num> native "*Float64Array" {
-
-  factory Float64Array(int length) =>  _construct_Float64Array(length);
-
-  factory Float64Array.fromList(List<num> list) => _construct_Float64Array(list);
-
-  factory Float64Array.fromBuffer(ArrayBuffer buffer) => _construct_Float64Array(buffer);
-
-  static _construct_Float64Array(arg) native 'return new Float64Array(arg);';
 
   static final int BYTES_PER_ELEMENT = 8;
 
@@ -6754,22 +6951,22 @@ class _Float64ArrayImpl extends _ArrayBufferViewImpl implements Float64Array, Li
 
   num last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<num> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<num> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [num initialValue]) {
+  void insertRange(int start, int rangeLength, [num initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<num> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <num>[]);
+  List<num> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <num>[]);
 
   // -- end List<num> mixins.
 
-  void setElements(Object array, [int offset = null]) native;
+  void setElements(Object array, [int offset = null]) native "set";
 
   _Float64ArrayImpl subarray(int start, [int end = null]) native;
 }
@@ -6814,9 +7011,7 @@ class _FormElementImpl extends _ElementImpl implements FormElement native "*HTML
 
 class _FrameElementImpl extends _ElementImpl implements FrameElement native "*HTMLFrameElement" {
 
-  _DocumentImpl get contentDocument() => _FixHtmlDocumentReference(_contentDocument);
-
-  _EventTargetImpl get _contentDocument() native "return this.contentDocument;";
+  final _DocumentImpl contentDocument;
 
   final _WindowImpl contentWindow;
 
@@ -6985,18 +7180,18 @@ class _HTMLCollectionImpl implements HTMLCollection native "*HTMLCollection" {
 
   Node last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<Node> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<Node> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [Node initialValue]) {
+  void insertRange(int start, int rangeLength, [Node initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<Node> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <Node>[]);
+  List<Node> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <Node>[]);
 
   // -- end List<Node> mixins.
 
@@ -7059,13 +7254,8 @@ class _HistoryImpl implements History native "*History" {
 
   void replaceState(Object data, String title, [String url = null]) native;
 }
-// Copyright (c) 2012, the Dart project authors.  Please see the AUTHORS file
-// for details. All rights reserved. Use of this source code is governed by a
-// BSD-style license that can be found in the LICENSE file.
 
-class _HtmlElementImpl extends _ElementImpl implements HtmlElement
-    native "*IntentionallyInvalid" {
-
+class _HtmlElementImpl extends _ElementImpl implements HtmlElement native "*HTMLHtmlElement" {
 }
 
 class _IDBAnyImpl implements IDBAny native "*IDBAny" {
@@ -7089,7 +7279,7 @@ class _IDBCursorImpl implements IDBCursor native "*IDBCursor" {
 
   final _IDBAnyImpl source;
 
-  void continueFunction([_IDBKeyImpl key = null]) native;
+  void continueFunction([_IDBKeyImpl key = null]) native "continue";
 
   _IDBRequestImpl delete() native;
 
@@ -7201,7 +7391,7 @@ class _IDBIndexImpl implements IDBIndex native "*IDBIndex" {
 
   _IDBRequestImpl count([var key_OR_range = null]) native;
 
-  _IDBRequestImpl getObject(_IDBKeyImpl key) native;
+  _IDBRequestImpl getObject(_IDBKeyImpl key) native "get";
 
   _IDBRequestImpl getKey(_IDBKeyImpl key) native;
 
@@ -7254,7 +7444,7 @@ class _IDBObjectStoreImpl implements IDBObjectStore native "*IDBObjectStore" {
 
   void deleteIndex(String name) native;
 
-  _IDBRequestImpl getObject(_IDBKeyImpl key) native;
+  _IDBRequestImpl getObject(_IDBKeyImpl key) native "get";
 
   _IDBIndexImpl index(String name) native;
 
@@ -7335,9 +7525,7 @@ class _IFrameElementImpl extends _ElementImpl implements IFrameElement native "*
 
   String align;
 
-  _DocumentImpl get contentDocument() => _FixHtmlDocumentReference(_contentDocument);
-
-  _EventTargetImpl get _contentDocument() native "return this.contentDocument;";
+  final _DocumentImpl contentDocument;
 
   final _WindowImpl contentWindow;
 
@@ -7537,14 +7725,6 @@ class _InputElementEventsImpl extends _ElementEventsImpl implements InputElement
 
 class _Int16ArrayImpl extends _ArrayBufferViewImpl implements Int16Array, List<int> native "*Int16Array" {
 
-  factory Int16Array(int length) =>  _construct_Int16Array(length);
-
-  factory Int16Array.fromList(List<int> list) => _construct_Int16Array(list);
-
-  factory Int16Array.fromBuffer(ArrayBuffer buffer) => _construct_Int16Array(buffer);
-
-  static _construct_Int16Array(arg) native 'return new Int16Array(arg);';
-
   static final int BYTES_PER_ELEMENT = 2;
 
   final int length;
@@ -7605,35 +7785,27 @@ class _Int16ArrayImpl extends _ArrayBufferViewImpl implements Int16Array, List<i
 
   int last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<int> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<int> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [int initialValue]) {
+  void insertRange(int start, int rangeLength, [int initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<int> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <int>[]);
+  List<int> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <int>[]);
 
   // -- end List<int> mixins.
 
-  void setElements(Object array, [int offset = null]) native;
+  void setElements(Object array, [int offset = null]) native "set";
 
   _Int16ArrayImpl subarray(int start, [int end = null]) native;
 }
 
 class _Int32ArrayImpl extends _ArrayBufferViewImpl implements Int32Array, List<int> native "*Int32Array" {
-
-  factory Int32Array(int length) =>  _construct_Int32Array(length);
-
-  factory Int32Array.fromList(List<int> list) => _construct_Int32Array(list);
-
-  factory Int32Array.fromBuffer(ArrayBuffer buffer) => _construct_Int32Array(buffer);
-
-  static _construct_Int32Array(arg) native 'return new Int32Array(arg);';
 
   static final int BYTES_PER_ELEMENT = 4;
 
@@ -7695,35 +7867,27 @@ class _Int32ArrayImpl extends _ArrayBufferViewImpl implements Int32Array, List<i
 
   int last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<int> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<int> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [int initialValue]) {
+  void insertRange(int start, int rangeLength, [int initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<int> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <int>[]);
+  List<int> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <int>[]);
 
   // -- end List<int> mixins.
 
-  void setElements(Object array, [int offset = null]) native;
+  void setElements(Object array, [int offset = null]) native "set";
 
   _Int32ArrayImpl subarray(int start, [int end = null]) native;
 }
 
 class _Int8ArrayImpl extends _ArrayBufferViewImpl implements Int8Array, List<int> native "*Int8Array" {
-
-  factory Int8Array(int length) =>  _construct_Int8Array(length);
-
-  factory Int8Array.fromList(List<int> list) => _construct_Int8Array(list);
-
-  factory Int8Array.fromBuffer(ArrayBuffer buffer) => _construct_Int8Array(buffer);
-
-  static _construct_Int8Array(arg) native 'return new Int8Array(arg);';
 
   static final int BYTES_PER_ELEMENT = 1;
 
@@ -7785,22 +7949,22 @@ class _Int8ArrayImpl extends _ArrayBufferViewImpl implements Int8Array, List<int
 
   int last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<int> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<int> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [int initialValue]) {
+  void insertRange(int start, int rangeLength, [int initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<int> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <int>[]);
+  List<int> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <int>[]);
 
   // -- end List<int> mixins.
 
-  void setElements(Object array, [int offset = null]) native;
+  void setElements(Object array, [int offset = null]) native "set";
 
   _Int8ArrayImpl subarray(int start, [int end = null]) native;
 }
@@ -8248,18 +8412,18 @@ class _MediaListImpl implements MediaList native "*MediaList" {
 
   String last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<String> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<String> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [String initialValue]) {
+  void insertRange(int start, int rangeLength, [String initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<String> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <String>[]);
+  List<String> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <String>[]);
 
   // -- end List<String> mixins.
 
@@ -8380,15 +8544,15 @@ class _MessagePortImpl extends _EventTargetImpl implements MessagePort native "*
   _MessagePortEventsImpl get on() =>
     new _MessagePortEventsImpl(this);
 
-  void _addEventListener(String type, EventListener listener, [bool useCapture = null]) native "this.addEventListener(type, listener, useCapture);";
+  void $dom_addEventListener(String type, EventListener listener, [bool useCapture = null]) native "addEventListener";
 
   void close() native;
 
-  bool _dispatchEvent(_EventImpl evt) native "return this.dispatchEvent(evt);";
+  bool $dom_dispatchEvent(_EventImpl evt) native "dispatchEvent";
 
   void postMessage(String message, [List messagePorts = null]) native;
 
-  void _removeEventListener(String type, EventListener listener, [bool useCapture = null]) native "this.removeEventListener(type, listener, useCapture);";
+  void $dom_removeEventListener(String type, EventListener listener, [bool useCapture = null]) native "removeEventListener";
 
   void start() native;
 
@@ -8465,9 +8629,7 @@ class _MouseEventImpl extends _UIEventImpl implements MouseEvent native "*MouseE
 
   final int offsetY;
 
-  _EventTargetImpl get relatedTarget() => _FixHtmlDocumentReference(_relatedTarget);
-
-  _EventTargetImpl get _relatedTarget() native "return this.relatedTarget;";
+  final _EventTargetImpl relatedTarget;
 
   final int screenX;
 
@@ -8481,7 +8643,7 @@ class _MouseEventImpl extends _UIEventImpl implements MouseEvent native "*MouseE
 
   final int y;
 
-  void _initMouseEvent(String type, bool canBubble, bool cancelable, _WindowImpl view, int detail, int screenX, int screenY, int clientX, int clientY, bool ctrlKey, bool altKey, bool shiftKey, bool metaKey, int button, _EventTargetImpl relatedTarget) native "this.initMouseEvent(type, canBubble, cancelable, view, detail, screenX, screenY, clientX, clientY, ctrlKey, altKey, shiftKey, metaKey, button, relatedTarget);";
+  void $dom_initMouseEvent(String type, bool canBubble, bool cancelable, _WindowImpl view, int detail, int screenX, int screenY, int clientX, int clientY, bool ctrlKey, bool altKey, bool shiftKey, bool metaKey, int button, _EventTargetImpl relatedTarget) native "initMouseEvent";
 }
 
 class _MutationEventImpl extends _EventImpl implements MutationEvent native "*MutationEvent" {
@@ -8567,18 +8729,18 @@ class _NamedNodeMapImpl implements NamedNodeMap native "*NamedNodeMap" {
 
   Node last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<Node> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<Node> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [Node initialValue]) {
+  void insertRange(int start, int rangeLength, [Node initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<Node> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <Node>[]);
+  List<Node> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <Node>[]);
 
   // -- end List<Node> mixins.
 
@@ -8648,11 +8810,110 @@ class _NavigatorUserMediaErrorImpl implements NavigatorUserMediaError native "*N
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
+/**
+ * Lazy implementation of the child nodes of an element that does not request
+ * the actual child nodes of an element until strictly necessary greatly
+ * improving performance for the typical cases where it is not required.
+ */
+class _ChildNodeListLazy implements NodeList {
+  final _NodeImpl _this;
+
+  _ChildNodeListLazy(this._this);
+
+
+  _NodeImpl get first() native "return this._this.firstChild;";
+  _NodeImpl last() native "return this._this.lastChild;";
+
+  void add(_NodeImpl value) {
+    _this.$dom_appendChild(value);
+  }
+
+  void addLast(_NodeImpl value) {
+    _this.$dom_appendChild(value);
+  }
+
+
+  void addAll(Collection<_NodeImpl> collection) {
+    for (_NodeImpl node in collection) {
+      _this.$dom_appendChild(node);
+    }
+  }
+
+  _NodeImpl removeLast() {
+    final result = last();
+    if (result != null) {
+      _this.$dom_removeChild(result);
+    }
+    return result;
+  }
+
+  void clear() {
+    _this.text = '';
+  }
+
+  void operator []=(int index, _NodeImpl value) {
+    _this.$dom_replaceChild(value, this[index]);
+  }
+
+  Iterator<Node> iterator() => _this.$dom_childNodes.iterator();
+
+  // TODO(jacobr): We can implement these methods much more efficiently by
+  // looking up the nodeList only once instead of once per iteration.
+  void forEach(void f(Node element)) => _Collections.forEach(this, f);
+
+  Collection map(f(Node element)) => _Collections.map(this, [], f);
+
+  Collection<Node> filter(bool f(Node element)) =>
+     new _NodeListWrapper(_Collections.filter(this, <Node>[], f));
+
+  bool every(bool f(Node element)) => _Collections.every(this, f);
+
+  bool some(bool f(Node element)) => _Collections.some(this, f);
+
+  bool isEmpty() => this.length == 0;
+
+  // From List<Node>:
+
+  // TODO(jacobr): this could be implemented for child node lists.
+  // The exception we throw here is misleading.
+  void sort(int compare(Node a, Node b)) {
+    throw new UnsupportedOperationException("Cannot sort immutable List.");
+  }
+
+  int indexOf(Node element, [int start = 0]) =>
+      _Lists.indexOf(this, element, start, this.length);
+
+  int lastIndexOf(Node element, [int start = 0]) =>
+      _Lists.lastIndexOf(this, element, start);
+
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<Node> from, [int startFrom]) {
+    throw new UnsupportedOperationException(
+        "Cannot setRange on immutable List.");
+  }
+  void removeRange(int start, int rangeLength) {
+    throw new UnsupportedOperationException(
+        "Cannot removeRange on immutable List.");
+  }
+  void insertRange(int start, int rangeLength, [Node initialValue]) {
+    throw new UnsupportedOperationException(
+        "Cannot insertRange on immutable List.");
+  }
+  NodeList getRange(int start, int rangeLength) =>
+    new _NodeListWrapper(_Lists.getRange(this, start, rangeLength, <Node>[]));
+
+  // -- end List<Node> mixins.
+
+  // TODO(jacobr): benchmark whether this is more efficient or whether caching
+  // a local copy of $dom_childNodes is more efficient.
+  int get length() => _this.$dom_childNodes.length;
+
+  _NodeImpl operator[](int index) => _this.$dom_childNodes[index];
+}
+
 class _NodeImpl extends _EventTargetImpl implements Node native "*Node" {
-  _NodeListImpl get nodes() {
-    final list = _childNodes;
-    list._parent = this;
-    return list;
+  _ChildNodeListLazy get nodes() {
+    return new _ChildNodeListLazy(this);
   }
 
   void set nodes(Collection<Node> value) {
@@ -8661,7 +8922,7 @@ class _NodeImpl extends _EventTargetImpl implements Node native "*Node" {
     List copy = new List.from(value);
     text = '';
     for (Node node in copy) {
-      _appendChild(node);
+      $dom_appendChild(node);
     }
   }
 
@@ -8669,7 +8930,7 @@ class _NodeImpl extends _EventTargetImpl implements Node native "*Node" {
   _NodeImpl remove() {
     if (this.parent != null) {
       final _NodeImpl parent = this.parent;
-      parent._removeChild(this);
+      parent.$dom_removeChild(this);
     }
     return this;
   }
@@ -8677,7 +8938,7 @@ class _NodeImpl extends _EventTargetImpl implements Node native "*Node" {
   _NodeImpl replaceWith(Node otherNode) {
     try {
       final _NodeImpl parent = this.parent;
-      parent._replaceChild(otherNode, this);
+      parent.$dom_replaceChild(otherNode, this);
     } catch(var e) {
       
     };
@@ -8721,15 +8982,19 @@ class _NodeImpl extends _EventTargetImpl implements Node native "*Node" {
 
   static final int TEXT_NODE = 3;
 
-  _NamedNodeMapImpl get _attributes() native "return this.attributes;";
+  _NamedNodeMapImpl get $dom_attributes() native "return this.attributes;";
 
-  _NodeListImpl get _childNodes() native "return this.childNodes;";
+  _NodeListImpl get $dom_childNodes() native "return this.childNodes;";
+
+  _NodeImpl get $dom_firstChild() native "return this.firstChild;";
+
+  _NodeImpl get $dom_lastChild() native "return this.lastChild;";
 
   _NodeImpl get nextNode() native "return this.nextSibling;";
 
-  _DocumentImpl get document() => _FixHtmlDocumentReference(_document);
+  int get $dom_nodeType() native "return this.nodeType;";
 
-  _EventTargetImpl get _document() native "return this.ownerDocument;";
+  _DocumentImpl get document() native "return this.ownerDocument;";
 
   _NodeImpl get parent() native "return this.parentNode;";
 
@@ -8739,9 +9004,9 @@ class _NodeImpl extends _EventTargetImpl implements Node native "*Node" {
 
   void set text(String value) native "this.textContent = value;";
 
-  _NodeImpl _appendChild(_NodeImpl newChild) native "return this.appendChild(newChild);";
+  _NodeImpl $dom_appendChild(_NodeImpl newChild) native "appendChild";
 
-  _NodeImpl clone(bool deep) native "return this.cloneNode(deep);";
+  _NodeImpl clone(bool deep) native "cloneNode";
 
   bool contains(_NodeImpl other) native;
 
@@ -8749,9 +9014,9 @@ class _NodeImpl extends _EventTargetImpl implements Node native "*Node" {
 
   _NodeImpl insertBefore(_NodeImpl newChild, _NodeImpl refChild) native;
 
-  _NodeImpl _removeChild(_NodeImpl oldChild) native "return this.removeChild(oldChild);";
+  _NodeImpl $dom_removeChild(_NodeImpl oldChild) native "removeChild";
 
-  _NodeImpl _replaceChild(_NodeImpl newChild, _NodeImpl oldChild) native "return this.replaceChild(newChild, oldChild);";
+  _NodeImpl $dom_replaceChild(_NodeImpl newChild, _NodeImpl oldChild) native "replaceChild";
 
 }
 
@@ -8864,15 +9129,17 @@ class _ListWrapper<E> implements List<E> {
 
   E last() => _list.last();
 
-  List<E> getRange(int start, int length) => _list.getRange(start, length);
+  List<E> getRange(int start, int rangeLength) =>
+    _list.getRange(start, rangeLength);
 
-  void setRange(int start, int length, List<E> from, [int startFrom = 0]) =>
-    _list.setRange(start, length, from, startFrom);
+  void setRange(int start, int rangeLength, List<E> from, [int startFrom = 0])
+      => _list.setRange(start, rangeLength, from, startFrom);
 
-  void removeRange(int start, int length) => _list.removeRange(start, length);
+  void removeRange(int start, int rangeLength) =>
+    _list.removeRange(start, rangeLength);
 
-  void insertRange(int start, int length, [E initialValue = null]) =>
-    _list.insertRange(start, length, initialValue);
+  void insertRange(int start, int rangeLength, [E initialValue = null]) =>
+    _list.insertRange(start, rangeLength, initialValue);
 
   E get first() => _list[0];
 }
@@ -8887,8 +9154,8 @@ class _NodeListWrapper extends _ListWrapper<Node> implements NodeList {
   NodeList filter(bool f(Node element)) =>
     new _NodeListWrapper(_list.filter(f));
 
-  NodeList getRange(int start, int length) =>
-    new _NodeListWrapper(_list.getRange(start, length));
+  NodeList getRange(int start, int rangeLength) =>
+    new _NodeListWrapper(_list.getRange(start, rangeLength));
 }
 
 class _NodeListImpl implements NodeList native "*NodeList" {
@@ -8909,25 +9176,25 @@ class _NodeListImpl implements NodeList native "*NodeList" {
   // From Collection<Node>:
 
   void add(_NodeImpl value) {
-    _parent._appendChild(value);
+    _parent.$dom_appendChild(value);
   }
 
   void addLast(_NodeImpl value) {
-    _parent._appendChild(value);
+    _parent.$dom_appendChild(value);
   }
 
   void addAll(Collection<_NodeImpl> collection) {
     for (_NodeImpl node in collection) {
-      _parent._appendChild(node);      
+      _parent.$dom_appendChild(node);      
     }
   }
 
   _NodeImpl removeLast() {
-    final last = this.last();
-    if (last != null) {
-      _parent._removeChild(last);
+    final result = this.last();
+    if (result != null) {
+      _parent.$dom_removeChild(result);
     }
-    return last;
+    return result;
   }
 
   void clear() {
@@ -8935,7 +9202,7 @@ class _NodeListImpl implements NodeList native "*NodeList" {
   }
 
   void operator []=(int index, _NodeImpl value) {
-    _parent._replaceChild(value, this[index]);
+    _parent.$dom_replaceChild(value, this[index]);
   }
 
   void forEach(void f(Node element)) => _Collections.forEach(this, f);
@@ -8967,17 +9234,17 @@ class _NodeListImpl implements NodeList native "*NodeList" {
   Node get first() => this[0];
 
   // FIXME: implement thesee.
-  void setRange(int start, int length, List<Node> from, [int startFrom]) {
+  void setRange(int start, int rangeLength, List<Node> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [Node initialValue]) {
+  void insertRange(int start, int rangeLength, [Node initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  NodeList getRange(int start, int length) =>
-    new _NodeListWrapper(_Lists.getRange(this, start, length, <Node>[]));
+  NodeList getRange(int start, int rangeLength) =>
+    new _NodeListWrapper(_Lists.getRange(this, start, rangeLength, <Node>[]));
 
   // -- end List<Node> mixins.
 
@@ -8990,9 +9257,9 @@ class _NodeListImpl implements NodeList native "*NodeList" {
 
 class _NodeSelectorImpl implements NodeSelector native "*NodeSelector" {
 
-  _ElementImpl query(String selectors) native "return this.querySelector(selectors);";
+  _ElementImpl query(String selectors) native "querySelector";
 
-  _NodeListImpl _querySelectorAll(String selectors) native "return this.querySelectorAll(selectors);";
+  _NodeListImpl $dom_querySelectorAll(String selectors) native "querySelectorAll";
 }
 
 class _NotationImpl extends _NodeImpl implements Notation native "*Notation" {
@@ -9085,9 +9352,7 @@ class _ObjectElementImpl extends _ElementImpl implements ObjectElement native "*
 
   String codeType;
 
-  _DocumentImpl get contentDocument() => _FixHtmlDocumentReference(_contentDocument);
-
-  _EventTargetImpl get _contentDocument() native "return this.contentDocument;";
+  final _DocumentImpl contentDocument;
 
   String data;
 
@@ -9672,7 +9937,7 @@ class _SVGAElementImpl extends _SVGElementImpl implements SVGAElement native "*S
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -9901,7 +10166,7 @@ class _SVGCircleElementImpl extends _SVGElementImpl implements SVGCircleElement 
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -9953,7 +10218,7 @@ class _SVGClipPathElementImpl extends _SVGElementImpl implements SVGClipPathElem
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -10078,7 +10343,7 @@ class _SVGDefsElementImpl extends _SVGElementImpl implements SVGDefsElement nati
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -10114,7 +10379,7 @@ class _SVGDescElementImpl extends _SVGElementImpl implements SVGDescElement nati
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -10126,7 +10391,7 @@ class _SVGDocumentImpl extends _DocumentImpl implements SVGDocument native "*SVG
 
   final _SVGSVGElementImpl rootElement;
 
-  _EventImpl _createEvent(String eventType) native "return this.createEvent(eventType);";
+  _EventImpl $dom_createEvent(String eventType) native "createEvent";
 }
 // Copyright (c) 2011, the Dart project authors.  Please see the AUTHORS file
 // for details. All rights reserved. Use of this source code is governed by a
@@ -10135,7 +10400,7 @@ class _SVGDocumentImpl extends _DocumentImpl implements SVGDocument native "*SVG
 class _AttributeClassSet extends _CssClassSet {
   _AttributeClassSet(element) : super(element);
 
-  String _className() => _element.attributes['class'];
+  String $dom_className() => _element.attributes['class'];
 
   void _write(Set s) {
     _element.attributes['class'] = _formatSet(s);
@@ -10160,15 +10425,15 @@ class _SVGElementImpl extends _ElementImpl implements SVGElement native "*SVGEle
 
   String get outerHTML() {
     final container = new Element.tag("div");
-    final SVGElement clone = this.clone(true);
-    container.elements.add(clone);
+    final SVGElement cloned = this.clone(true);
+    container.elements.add(cloned);
     return container.innerHTML;
   }
 
   String get innerHTML() {
     final container = new Element.tag("div");
-    final SVGElement clone = this.clone(true);
-    container.elements.addAll(clone.elements);
+    final SVGElement cloned = this.clone(true);
+    container.elements.addAll(cloned.elements);
     return container.innerHTML;
   }
 
@@ -10215,11 +10480,11 @@ class _SVGElementInstanceImpl extends _EventTargetImpl implements SVGElementInst
 
   final _SVGElementInstanceImpl previousSibling;
 
-  void _addEventListener(String type, EventListener listener, [bool useCapture = null]) native "this.addEventListener(type, listener, useCapture);";
+  void $dom_addEventListener(String type, EventListener listener, [bool useCapture = null]) native "addEventListener";
 
-  bool _dispatchEvent(_EventImpl event) native "return this.dispatchEvent(event);";
+  bool $dom_dispatchEvent(_EventImpl event) native "dispatchEvent";
 
-  void _removeEventListener(String type, EventListener listener, [bool useCapture = null]) native "this.removeEventListener(type, listener, useCapture);";
+  void $dom_removeEventListener(String type, EventListener listener, [bool useCapture = null]) native "removeEventListener";
 }
 
 class _SVGElementInstanceEventsImpl extends _EventsImpl implements SVGElementInstanceEvents {
@@ -10345,7 +10610,7 @@ class _SVGEllipseElementImpl extends _SVGElementImpl implements SVGEllipseElemen
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -10427,7 +10692,7 @@ class _SVGFEBlendElementImpl extends _SVGElementImpl implements SVGFEBlendElemen
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -10467,7 +10732,7 @@ class _SVGFEColorMatrixElementImpl extends _SVGElementImpl implements SVGFEColor
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -10493,7 +10758,7 @@ class _SVGFEComponentTransferElementImpl extends _SVGElementImpl implements SVGF
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -10545,7 +10810,7 @@ class _SVGFECompositeElementImpl extends _SVGElementImpl implements SVGFEComposi
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -10601,7 +10866,7 @@ class _SVGFEConvolveMatrixElementImpl extends _SVGElementImpl implements SVGFECo
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -10635,7 +10900,7 @@ class _SVGFEDiffuseLightingElementImpl extends _SVGElementImpl implements SVGFED
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -10679,7 +10944,7 @@ class _SVGFEDisplacementMapElementImpl extends _SVGElementImpl implements SVGFED
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -10722,7 +10987,7 @@ class _SVGFEDropShadowElementImpl extends _SVGElementImpl implements SVGFEDropSh
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -10746,7 +11011,7 @@ class _SVGFEFloodElementImpl extends _SVGElementImpl implements SVGFEFloodElemen
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -10790,7 +11055,7 @@ class _SVGFEGaussianBlurElementImpl extends _SVGElementImpl implements SVGFEGaus
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -10830,7 +11095,7 @@ class _SVGFEImageElementImpl extends _SVGElementImpl implements SVGFEImageElemen
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -10854,7 +11119,7 @@ class _SVGFEMergeElementImpl extends _SVGElementImpl implements SVGFEMergeElemen
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -10899,7 +11164,7 @@ class _SVGFEMorphologyElementImpl extends _SVGElementImpl implements SVGFEMorpho
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -10929,7 +11194,7 @@ class _SVGFEOffsetElementImpl extends _SVGElementImpl implements SVGFEOffsetElem
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -10970,7 +11235,7 @@ class _SVGFESpecularLightingElementImpl extends _SVGElementImpl implements SVGFE
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -11015,7 +11280,7 @@ class _SVGFETileElementImpl extends _SVGElementImpl implements SVGFETileElement 
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -11063,7 +11328,7 @@ class _SVGFETurbulenceElementImpl extends _SVGElementImpl implements SVGFETurbul
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -11107,7 +11372,7 @@ class _SVGFilterElementImpl extends _SVGElementImpl implements SVGFilterElement 
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -11185,7 +11450,7 @@ class _SVGForeignObjectElementImpl extends _SVGElementImpl implements SVGForeign
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -11235,7 +11500,7 @@ class _SVGGElementImpl extends _SVGElementImpl implements SVGGElement native "*S
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -11284,7 +11549,7 @@ class _SVGGlyphRefElementImpl extends _SVGElementImpl implements SVGGlyphRefElem
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -11318,7 +11583,7 @@ class _SVGGradientElementImpl extends _SVGElementImpl implements SVGGradientElem
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -11367,7 +11632,7 @@ class _SVGImageElementImpl extends _SVGElementImpl implements SVGImageElement na
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -11488,7 +11753,7 @@ class _SVGLineElementImpl extends _SVGElementImpl implements SVGLineElement nati
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -11595,7 +11860,7 @@ class _SVGMarkerElementImpl extends _SVGElementImpl implements SVGMarkerElement 
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -11645,7 +11910,7 @@ class _SVGMaskElementImpl extends _SVGElementImpl implements SVGMaskElement nati
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -11829,7 +12094,7 @@ class _SVGPathElementImpl extends _SVGElementImpl implements SVGPathElement nati
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -12136,7 +12401,7 @@ class _SVGPatternElementImpl extends _SVGElementImpl implements SVGPatternElemen
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -12206,7 +12471,7 @@ class _SVGPolygonElementImpl extends _SVGElementImpl implements SVGPolygonElemen
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -12260,7 +12525,7 @@ class _SVGPolylineElementImpl extends _SVGElementImpl implements SVGPolylineElem
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -12381,7 +12646,7 @@ class _SVGRectElementImpl extends _SVGElementImpl implements SVGRectElement nati
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -12520,7 +12785,7 @@ class _SVGSVGElementImpl extends _SVGElementImpl implements SVGSVGElement native
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -12574,7 +12839,7 @@ class _SVGStopElementImpl extends _SVGElementImpl implements SVGStopElement nati
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -12603,7 +12868,7 @@ class _SVGStringListImpl implements SVGStringList native "*SVGStringList" {
 
 class _SVGStylableImpl implements SVGStylable native "*SVGStylable" {
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_svgClassName() native "return this.className;";
 
   final _CSSStyleDeclarationImpl style;
 
@@ -12654,7 +12919,7 @@ class _SVGSwitchElementImpl extends _SVGElementImpl implements SVGSwitchElement 
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -12694,7 +12959,7 @@ class _SVGSymbolElementImpl extends _SVGElementImpl implements SVGSymbolElement 
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -12781,7 +13046,7 @@ class _SVGTextContentElementImpl extends _SVGElementImpl implements SVGTextConte
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -12858,7 +13123,7 @@ class _SVGTitleElementImpl extends _SVGElementImpl implements SVGTitleElement na
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -12983,7 +13248,7 @@ class _SVGUseElementImpl extends _SVGElementImpl implements SVGUseElement native
 
   // From SVGStylable
 
-  _SVGAnimatedStringImpl get _svgClassName() native "return this.className;";
+  _SVGAnimatedStringImpl get $dom_$dom_svgClassName() native "return this.className;";
 
   // Use implementation from Element.
   // final _CSSStyleDeclarationImpl style;
@@ -13376,20 +13641,71 @@ class _SpeechRecognitionResultListImpl implements SpeechRecognitionResultList na
 
   _SpeechRecognitionResultImpl item(int index) native;
 }
+// Copyright (c) 2012, the Dart project authors.  Please see the AUTHORS file
+// for details. All rights reserved. Use of this source code is governed by a
+// BSD-style license that can be found in the LICENSE file.
 
 class _StorageImpl implements Storage native "*Storage" {
 
-  final int length;
+  // TODO(nweiz): update this when maps support lazy iteration
+  bool containsValue(String value) => getValues().some((e) => e == value);
 
-  void clear() native;
+  bool containsKey(String key) => $dom_getItem(key) != null;
 
-  String getItem(String key) native;
+  String operator [](String key) => $dom_getItem(key);
 
-  String key(int index) native;
+  void operator []=(String key, String value) => $dom_setItem(key, value);
 
-  void removeItem(String key) native;
+  String putIfAbsent(String key, String ifAbsent()) {
+    if (!containsKey(key)) this[key] = ifAbsent();
+    return this[key];
+  }
 
-  void setItem(String key, String data) native;
+  String remove(String key) {
+    final value = this[key];
+    $dom_removeItem(key);
+    return value;
+  }
+
+  void clear() => $dom_clear();
+
+  void forEach(void f(String key, String value)) {
+    for (var i = 0; true; i++) {
+      final key = $dom_key(i);
+      if (key == null) return;
+
+      f(key, this[key]);
+    }
+  }
+
+  Collection<String> getKeys() {
+    final keys = [];
+    forEach((k, v) => keys.add(k));
+    return keys;
+  }
+
+  Collection<String> getValues() {
+    final values = [];
+    forEach((k, v) => values.add(v));
+    return values;
+  }
+
+  int get length() => $dom_length;
+
+  bool isEmpty() => $dom_key(0) == null;
+
+  int get $dom_length() native "return this.length;";
+
+  void $dom_clear() native "clear";
+
+  String $dom_getItem(String key) native "getItem";
+
+  String $dom_key(int index) native "key";
+
+  void $dom_removeItem(String key) native "removeItem";
+
+  void $dom_setItem(String key, String data) native "setItem";
+
 }
 
 class _StorageEventImpl extends _EventImpl implements StorageEvent native "*StorageEvent" {
@@ -13515,18 +13831,18 @@ class _StyleSheetListImpl implements StyleSheetList native "*StyleSheetList" {
 
   StyleSheet last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<StyleSheet> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<StyleSheet> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [StyleSheet initialValue]) {
+  void insertRange(int start, int rangeLength, [StyleSheet initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<StyleSheet> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <StyleSheet>[]);
+  List<StyleSheet> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <StyleSheet>[]);
 
   // -- end List<StyleSheet> mixins.
 
@@ -13873,9 +14189,7 @@ class _TouchImpl implements Touch native "*Touch" {
 
   final int screenY;
 
-  _EventTargetImpl get target() => _FixHtmlDocumentReference(_target);
-
-  _EventTargetImpl get _target() native "return this.target;";
+  final _EventTargetImpl target;
 
   final num webkitForce;
 
@@ -13967,18 +14281,18 @@ class _TouchListImpl implements TouchList native "*TouchList" {
 
   Touch last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<Touch> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<Touch> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [Touch initialValue]) {
+  void insertRange(int start, int rangeLength, [Touch initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<Touch> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <Touch>[]);
+  List<Touch> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <Touch>[]);
 
   // -- end List<Touch> mixins.
 
@@ -14083,14 +14397,6 @@ class _UListElementImpl extends _ElementImpl implements UListElement native "*HT
 
 class _Uint16ArrayImpl extends _ArrayBufferViewImpl implements Uint16Array, List<int> native "*Uint16Array" {
 
-  factory Uint16Array(int length) =>  _construct_Uint16Array(length);
-
-  factory Uint16Array.fromList(List<int> list) => _construct_Uint16Array(list);
-
-  factory Uint16Array.fromBuffer(ArrayBuffer buffer) => _construct_Uint16Array(buffer);
-
-  static _construct_Uint16Array(arg) native 'return new Uint16Array(arg);';
-
   static final int BYTES_PER_ELEMENT = 2;
 
   final int length;
@@ -14151,35 +14457,27 @@ class _Uint16ArrayImpl extends _ArrayBufferViewImpl implements Uint16Array, List
 
   int last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<int> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<int> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [int initialValue]) {
+  void insertRange(int start, int rangeLength, [int initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<int> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <int>[]);
+  List<int> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <int>[]);
 
   // -- end List<int> mixins.
 
-  void setElements(Object array, [int offset = null]) native;
+  void setElements(Object array, [int offset = null]) native "set";
 
   _Uint16ArrayImpl subarray(int start, [int end = null]) native;
 }
 
 class _Uint32ArrayImpl extends _ArrayBufferViewImpl implements Uint32Array, List<int> native "*Uint32Array" {
-
-  factory Uint32Array(int length) =>  _construct_Uint32Array(length);
-
-  factory Uint32Array.fromList(List<int> list) => _construct_Uint32Array(list);
-
-  factory Uint32Array.fromBuffer(ArrayBuffer buffer) => _construct_Uint32Array(buffer);
-
-  static _construct_Uint32Array(arg) native 'return new Uint32Array(arg);';
 
   static final int BYTES_PER_ELEMENT = 4;
 
@@ -14241,35 +14539,27 @@ class _Uint32ArrayImpl extends _ArrayBufferViewImpl implements Uint32Array, List
 
   int last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<int> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<int> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [int initialValue]) {
+  void insertRange(int start, int rangeLength, [int initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<int> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <int>[]);
+  List<int> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <int>[]);
 
   // -- end List<int> mixins.
 
-  void setElements(Object array, [int offset = null]) native;
+  void setElements(Object array, [int offset = null]) native "set";
 
   _Uint32ArrayImpl subarray(int start, [int end = null]) native;
 }
 
 class _Uint8ArrayImpl extends _ArrayBufferViewImpl implements Uint8Array, List<int> native "*Uint8Array" {
-
-  factory Uint8Array(int length) =>  _construct_Uint8Array(length);
-
-  factory Uint8Array.fromList(List<int> list) => _construct_Uint8Array(list);
-
-  factory Uint8Array.fromBuffer(ArrayBuffer buffer) => _construct_Uint8Array(buffer);
-
-  static _construct_Uint8Array(arg) native 'return new Uint8Array(arg);';
 
   static final int BYTES_PER_ELEMENT = 1;
 
@@ -14331,40 +14621,32 @@ class _Uint8ArrayImpl extends _ArrayBufferViewImpl implements Uint8Array, List<i
 
   int last() => this[length - 1];
 
-  // FIXME: implement thesee.
-  void setRange(int start, int length, List<int> from, [int startFrom]) {
+  // FIXME: implement these.
+  void setRange(int start, int rangeLength, List<int> from, [int startFrom]) {
     throw new UnsupportedOperationException("Cannot setRange on immutable List.");
   }
-  void removeRange(int start, int length) {
+  void removeRange(int start, int rangeLength) {
     throw new UnsupportedOperationException("Cannot removeRange on immutable List.");
   }
-  void insertRange(int start, int length, [int initialValue]) {
+  void insertRange(int start, int rangeLength, [int initialValue]) {
     throw new UnsupportedOperationException("Cannot insertRange on immutable List.");
   }
-  List<int> getRange(int start, int length) =>
-      _Lists.getRange(this, start, length, <int>[]);
+  List<int> getRange(int start, int rangeLength) =>
+      _Lists.getRange(this, start, rangeLength, <int>[]);
 
   // -- end List<int> mixins.
 
-  void setElements(Object array, [int offset = null]) native;
+  void setElements(Object array, [int offset = null]) native "set";
 
   _Uint8ArrayImpl subarray(int start, [int end = null]) native;
 }
 
 class _Uint8ClampedArrayImpl extends _Uint8ArrayImpl implements Uint8ClampedArray, List<int> native "*Uint8ClampedArray" {
 
-  factory Uint8ClampedArray(int length) =>  _construct_Uint8ClampedArray(length);
-
-  factory Uint8ClampedArray.fromList(List<int> list) => _construct_Uint8ClampedArray(list);
-
-  factory Uint8ClampedArray.fromBuffer(ArrayBuffer buffer) => _construct_Uint8ClampedArray(buffer);
-
-  static _construct_Uint8ClampedArray(arg) native 'return new Uint8ClampedArray(arg);';
-
   // Use implementation from Uint8Array.
   // final int length;
 
-  void setElements(Object array, [int offset = null]) native;
+  void setElements(Object array, [int offset = null]) native "set";
 
   _Uint8ClampedArrayImpl subarray(int start, [int end = null]) native;
 }
@@ -15418,13 +15700,13 @@ class _WebSocketImpl extends _EventTargetImpl implements WebSocket native "*WebS
 
   final String url;
 
-  void _addEventListener(String type, EventListener listener, [bool useCapture = null]) native "this.addEventListener(type, listener, useCapture);";
+  void $dom_addEventListener(String type, EventListener listener, [bool useCapture = null]) native "addEventListener";
 
   void close([int code = null, String reason = null]) native;
 
-  bool _dispatchEvent(_EventImpl evt) native "return this.dispatchEvent(evt);";
+  bool $dom_dispatchEvent(_EventImpl evt) native "dispatchEvent";
 
-  void _removeEventListener(String type, EventListener listener, [bool useCapture = null]) native "this.removeEventListener(type, listener, useCapture);";
+  void $dom_removeEventListener(String type, EventListener listener, [bool useCapture = null]) native "removeEventListener";
 
   bool send(String data) native;
 }
@@ -15483,7 +15765,7 @@ class _WheelEventImpl extends _UIEventImpl implements WheelEvent native "*WheelE
 
 class _WindowImpl extends _EventTargetImpl implements Window native "@*DOMWindow" {
 
-  _DocumentImpl get document() native "return this.document.documentElement;";
+  _DocumentImpl get document() native "return this.document;";
 
   void requestLayoutFrame(TimeoutHandler callback) {
     _addMeasurementFrameCallback(callback);
@@ -15595,7 +15877,7 @@ class _WindowImpl extends _EventTargetImpl implements Window native "@*DOMWindow
 
   final _WindowImpl window;
 
-  void _addEventListener(String type, EventListener listener, [bool useCapture = null]) native "this.addEventListener(type, listener, useCapture);";
+  void $dom_addEventListener(String type, EventListener listener, [bool useCapture = null]) native "addEventListener";
 
   void alert(String message) native;
 
@@ -15615,13 +15897,13 @@ class _WindowImpl extends _EventTargetImpl implements Window native "@*DOMWindow
 
   bool confirm(String message) native;
 
-  bool _dispatchEvent(_EventImpl evt) native "return this.dispatchEvent(evt);";
+  bool $dom_dispatchEvent(_EventImpl evt) native "dispatchEvent";
 
   bool find(String string, bool caseSensitive, bool backwards, bool wrap, bool wholeWord, bool searchInFrames, bool showDialog) native;
 
   void focus() native;
 
-  _CSSStyleDeclarationImpl _getComputedStyle(_ElementImpl element, String pseudoElement) native "return this.getComputedStyle(element, pseudoElement);";
+  _CSSStyleDeclarationImpl $dom_getComputedStyle(_ElementImpl element, String pseudoElement) native "getComputedStyle";
 
   _CSSRuleListImpl getMatchedCSSRules(_ElementImpl element, String pseudoElement) native;
 
@@ -15645,7 +15927,7 @@ class _WindowImpl extends _EventTargetImpl implements Window native "@*DOMWindow
 
   void releaseEvents() native;
 
-  void _removeEventListener(String type, EventListener listener, [bool useCapture = null]) native "this.removeEventListener(type, listener, useCapture);";
+  void $dom_removeEventListener(String type, EventListener listener, [bool useCapture = null]) native "removeEventListener";
 
   void resizeBy(num x, num y) native;
 
@@ -15963,9 +16245,7 @@ class _XMLHttpRequestImpl extends _EventTargetImpl implements XMLHttpRequest nat
 
   String responseType;
 
-  _DocumentImpl get responseXML() => _FixHtmlDocumentReference(_responseXML);
-
-  _EventTargetImpl get _responseXML() native "return this.responseXML;";
+  final _DocumentImpl responseXML;
 
   final int status;
 
@@ -15977,9 +16257,9 @@ class _XMLHttpRequestImpl extends _EventTargetImpl implements XMLHttpRequest nat
 
   void abort() native;
 
-  void _addEventListener(String type, EventListener listener, [bool useCapture = null]) native "this.addEventListener(type, listener, useCapture);";
+  void $dom_addEventListener(String type, EventListener listener, [bool useCapture = null]) native "addEventListener";
 
-  bool _dispatchEvent(_EventImpl evt) native "return this.dispatchEvent(evt);";
+  bool $dom_dispatchEvent(_EventImpl evt) native "dispatchEvent";
 
   String getAllResponseHeaders() native;
 
@@ -15989,7 +16269,7 @@ class _XMLHttpRequestImpl extends _EventTargetImpl implements XMLHttpRequest nat
 
   void overrideMimeType(String override) native;
 
-  void _removeEventListener(String type, EventListener listener, [bool useCapture = null]) native "this.removeEventListener(type, listener, useCapture);";
+  void $dom_removeEventListener(String type, EventListener listener, [bool useCapture = null]) native "removeEventListener";
 
   void send([var data = null]) native;
 
@@ -16041,11 +16321,11 @@ class _XMLHttpRequestUploadImpl extends _EventTargetImpl implements XMLHttpReque
   _XMLHttpRequestUploadEventsImpl get on() =>
     new _XMLHttpRequestUploadEventsImpl(this);
 
-  void _addEventListener(String type, EventListener listener, [bool useCapture = null]) native "this.addEventListener(type, listener, useCapture);";
+  void $dom_addEventListener(String type, EventListener listener, [bool useCapture = null]) native "addEventListener";
 
-  bool _dispatchEvent(_EventImpl evt) native "return this.dispatchEvent(evt);";
+  bool $dom_dispatchEvent(_EventImpl evt) native "dispatchEvent";
 
-  void _removeEventListener(String type, EventListener listener, [bool useCapture = null]) native "this.removeEventListener(type, listener, useCapture);";
+  void $dom_removeEventListener(String type, EventListener listener, [bool useCapture = null]) native "removeEventListener";
 }
 
 class _XMLHttpRequestUploadEventsImpl extends _EventsImpl implements XMLHttpRequestUploadEvents {
@@ -16158,9 +16438,7 @@ class _XSLTProcessorImpl implements XSLTProcessor native "*XSLTProcessor" {
 
   void setParameter(String namespaceURI, String localName, String value) native;
 
-  _DocumentImpl transformToDocument(_NodeImpl source) => _FixHtmlDocumentReference(_transformToDocument(source));
-
-  _EventTargetImpl _transformToDocument(_NodeImpl source) native "return this.transformToDocument(source);";
+  _DocumentImpl transformToDocument(_NodeImpl source) native;
 
   _DocumentFragmentImpl transformToFragment(_NodeImpl source, _DocumentImpl docVal) native;
 }
@@ -16409,6 +16687,12 @@ class _XSLTProcessorFactoryProvider {
 interface AbstractWorker extends EventTarget {
 
   AbstractWorkerEvents get on();
+
+  void $dom_addEventListener(String type, EventListener listener, [bool useCapture]);
+
+  bool $dom_dispatchEvent(Event evt);
+
+  void $dom_removeEventListener(String type, EventListener listener, [bool useCapture]);
 }
 
 interface AbstractWorkerEvents extends Events {
@@ -19919,6 +20203,12 @@ interface DOMApplicationCache extends EventTarget {
 
   void abort();
 
+  void $dom_addEventListener(String type, EventListener listener, [bool useCapture]);
+
+  bool $dom_dispatchEvent(Event evt);
+
+  void $dom_removeEventListener(String type, EventListener listener, [bool useCapture]);
+
   void swapCache();
 
   void update();
@@ -20562,6 +20852,8 @@ interface Document extends HtmlElement {
 
   final Window window;
 
+  final Element documentElement;
+
   final String domain;
 
   final HeadElement head;
@@ -20600,15 +20892,33 @@ interface Document extends HtmlElement {
 
   DocumentFragment createDocumentFragment();
 
+  Element $dom_createElement(String tagName);
+
+  Element $dom_createElementNS(String namespaceURI, String qualifiedName);
+
+  Event $dom_createEvent(String eventType);
+
   Range createRange();
 
+  Text $dom_createTextNode(String data);
+
   Touch createTouch(Window window, EventTarget target, int identifier, int pageX, int pageY, int screenX, int screenY, int webkitRadiusX, int webkitRadiusY, num webkitRotationAngle, num webkitForce);
+
+  TouchList $dom_createTouchList();
 
   Element elementFromPoint(int x, int y);
 
   bool execCommand(String command, bool userInterface, String value);
 
   CanvasRenderingContext getCSSCanvasContext(String contextId, String name, int width, int height);
+
+  Element $dom_getElementById(String elementId);
+
+  NodeList $dom_getElementsByClassName(String tagname);
+
+  NodeList $dom_getElementsByName(String elementName);
+
+  NodeList $dom_getElementsByTagName(String tagname);
 
   bool queryCommandEnabled(String command);
 
@@ -20619,6 +20929,10 @@ interface Document extends HtmlElement {
   bool queryCommandSupported(String command);
 
   String queryCommandValue(String command);
+
+  Element query(String selectors);
+
+  NodeList $dom_querySelectorAll(String selectors);
 
   void webkitCancelFullScreen();
 
@@ -20747,6 +21061,8 @@ interface DocumentFragment extends Element default _DocumentFragmentFactoryProvi
 
   Element query(String selectors);
 
+  NodeList $dom_querySelectorAll(String selectors);
+
 }
 // Copyright (c) 2012, the Dart project authors.  Please see the AUTHORS file
 // for details. All rights reserved. Use of this source code is governed by a
@@ -20802,226 +21118,6 @@ interface EXTTextureFilterAnisotropic {
 
 // WARNING: Do not edit - generated code.
 
-/**
- * Provides a Map abstraction on top of data-* attributes, similar to the
- * dataSet in the old DOM.
- */
-class _DataAttributeMap implements Map<String, String> {
-
-  final Map<String, String> _attributes;
-
-  _DataAttributeMap(this._attributes);
-
-  // interface Map
-
-  // TODO: Use lazy iterator when it is available on Map.
-  bool containsValue(String value) => getValues().some((v) => v == value);
-
-  bool containsKey(String key) => _attributes.containsKey(_attr(key));
-
-  String operator [](String key) => _attributes[_attr(key)];
-
-  void operator []=(String key, String value) {
-    _attributes[_attr(key)] = value;
-  }
-
-  String putIfAbsent(String key, String ifAbsent()) {
-    if (!containsKey(key)) {
-      return this[key] = ifAbsent();
-    }
-    return this[key];
-  }
-
-  String remove(String key) => _attributes.remove(_attr(key));
-
-  void clear() {
-    // Needs to operate on a snapshot since we are mutatiting the collection.
-    for (String key in getKeys()) {
-      remove(key);
-    }
-  }
-
-  void forEach(void f(String key, String value)) {
-    _attributes.forEach((String key, String value) {
-      if (_matches(key)) {
-        f(_strip(key), value);
-      }
-    });
-  }
-
-  Collection<String> getKeys() {
-    final keys = new List<String>();
-    _attributes.forEach((String key, String value) {
-      if (_matches(key)) {
-        keys.add(_strip(key));
-      }
-    });
-    return keys;
-  }
-
-  Collection<String> getValues() {
-    final values = new List<String>();
-    _attributes.forEach((String key, String value) {
-      if (_matches(key)) {
-        values.add(value);
-      }
-    });
-    return values;
-  }
-
-  int get length() => getKeys().length;
-
-  // TODO: Use lazy iterator when it is available on Map.
-  bool isEmpty() => length == 0;
-
-  // Helpers.
-  String _attr(String key) => 'data-$key';
-  bool _matches(String key) => key.startsWith('data-');
-  String _strip(String key) => key.substring(5);
-}
-
-class _CssClassSet implements Set<String> {
-
-  final _ElementImpl _element;
-
-  _CssClassSet(this._element);
-
-  String toString() {
-    return _formatSet(_read());
-  }
-
-  // interface Iterable - BEGIN
-  Iterator<String> iterator() {
-    return _read().iterator();
-  }
-  // interface Iterable - END
-
-  // interface Collection - BEGIN
-  void forEach(void f(String element)) {
-    _read().forEach(f);
-  }
-
-  Collection map(f(String element)) {
-    return _read().map(f);
-  }
-
-  Collection<String> filter(bool f(String element)) {
-    return _read().filter(f);
-  }
-
-  bool every(bool f(String element)) {
-    return _read().every(f);
-  }
-
-  bool some(bool f(String element)) {
-    return _read().some(f);
-  }
-
-  bool isEmpty() {
-    return _read().isEmpty();
-  }
-
-  int get length() {
-    return _read().length;
-  }
-  // interface Collection - END
-
-  // interface Set - BEGIN
-  bool contains(String value) {
-    return _read().contains(value);
-  }
-
-  void add(String value) {
-    // TODO - figure out if we need to do any validation here
-    // or if the browser natively does enough
-    _modify((s) => s.add(value));
-  }
-
-  bool remove(String value) {
-    Set<String> s = _read();
-    bool result = s.remove(value);
-    _write(s);
-    return result;
-  }
-
-  void addAll(Collection<String> collection) {
-    // TODO - see comment above about validation
-    _modify((s) => s.addAll(collection));
-  }
-
-  void removeAll(Collection<String> collection) {
-    _modify((s) => s.removeAll(collection));
-  }
-
-  bool isSubsetOf(Collection<String> collection) {
-    return _read().isSubsetOf(collection);
-  }
-
-  bool containsAll(Collection<String> collection) {
-    return _read().containsAll(collection);
-  }
-
-  Set<String> intersection(Collection<String> other) {
-    return _read().intersection(other);
-  }
-
-  void clear() {
-    _modify((s) => s.clear());
-  }
-  // interface Set - END
-
-  /**
-   * Helper method used to modify the set of css classes on this element.
-   *
-   *   f - callback with:
-   *      s - a Set of all the css class name currently on this element.
-   *
-   *   After f returns, the modified set is written to the
-   *       className property of this element.
-   */
-  void _modify( f(Set<String> s)) {
-    Set<String> s = _read();
-    f(s);
-    _write(s);
-  }
-
-  /**
-   * Read the class names from the Element class property,
-   * and put them into a set (duplicates are discarded).
-   */
-  Set<String> _read() {
-    // TODO(mattsh) simplify this once split can take regex.
-    Set<String> s = new Set<String>();
-    for (String name in _className().split(' ')) {
-      String trimmed = name.trim();
-      if (!trimmed.isEmpty()) {
-        s.add(trimmed);
-      }
-    }
-    return s;
-  }
-
-  /**
-   * Read the class names as a space-separated string. This is meant to be
-   * overridden by subclasses.
-   */
-  String _className() => _element._className;
-
-  /**
-   * Join all the elements of a set into one string and write
-   * back to the element.
-   */
-  void _write(Set s) {
-    _element._className = _formatSet(s);
-  }
-
-  String _formatSet(Set<String> s) {
-    // TODO(mattsh) should be able to pass Set to String.joins http:/b/5398605
-    List list = new List.from(s);
-    return Strings.join(list, ' ');
-  }
-}
-
 interface ElementList extends List<Element> {
   // TODO(jacobr): add element batch manipulation methods.
   ElementList filter(bool f(Element element));
@@ -21030,6 +21126,15 @@ interface ElementList extends List<Element> {
 
   Element get first();
   // TODO(jacobr): add insertAt
+}
+
+/**
+ * All your attribute manipulation needs in one place.
+ * Extends the regular Map interface by automatically coercing non-string
+ * values to strings.
+ */
+interface AttributeMap extends Map<String, String> {
+  void operator []=(String key, value);
 }
 
 /**
@@ -21052,7 +21157,7 @@ interface Element extends Node, NodeSelector default _ElementFactoryProvider {
   Element.html(String html);
   Element.tag(String tag);
 
-  Map<String, String> get attributes();
+  AttributeMap get attributes();
   void set attributes(Map<String, String> value);
 
   /**
@@ -21074,7 +21179,7 @@ interface Element extends Node, NodeSelector default _ElementFactoryProvider {
 
   void set classes(Collection<String> value);
 
-  Map<String, String> get dataAttributes();
+  AttributeMap get dataAttributes();
   void set dataAttributes(Map<String, String> value);
 
   /**
@@ -21099,11 +21204,27 @@ interface Element extends Node, NodeSelector default _ElementFactoryProvider {
 
   static final int ALLOW_KEYBOARD_INPUT = 1;
 
+  final int $dom_childElementCount;
+
+  final HTMLCollection $dom_children;
+
+  String $dom_className;
+
+  final int $dom_clientHeight;
+
+  final int $dom_clientLeft;
+
+  final int $dom_clientTop;
+
+  final int $dom_clientWidth;
+
   String contentEditable;
 
   String dir;
 
   bool draggable;
+
+  final Element $dom_firstElementChild;
 
   bool hidden;
 
@@ -21115,15 +21236,31 @@ interface Element extends Node, NodeSelector default _ElementFactoryProvider {
 
   String lang;
 
-  final Element lastElementChild;
+  final Element $dom_lastElementChild;
 
   final Element nextElementSibling;
 
+  final int $dom_offsetHeight;
+
+  final int $dom_offsetLeft;
+
   final Element offsetParent;
+
+  final int $dom_offsetTop;
+
+  final int $dom_offsetWidth;
 
   final String outerHTML;
 
   final Element previousElementSibling;
+
+  final int $dom_scrollHeight;
+
+  int $dom_scrollLeft;
+
+  int $dom_scrollTop;
+
+  final int $dom_scrollWidth;
 
   bool spellcheck;
 
@@ -21147,6 +21284,18 @@ interface Element extends Node, NodeSelector default _ElementFactoryProvider {
 
   void focus();
 
+  String $dom_getAttribute(String name);
+
+  ClientRect $dom_getBoundingClientRect();
+
+  ClientRectList $dom_getClientRects();
+
+  NodeList $dom_getElementsByClassName(String name);
+
+  NodeList $dom_getElementsByTagName(String name);
+
+  bool $dom_hasAttribute(String name);
+
   Element insertAdjacentElement(String where, Element element);
 
   void insertAdjacentHTML(String where, String html);
@@ -21155,11 +21304,17 @@ interface Element extends Node, NodeSelector default _ElementFactoryProvider {
 
   Element query(String selectors);
 
+  NodeList $dom_querySelectorAll(String selectors);
+
+  void $dom_removeAttribute(String name);
+
   void scrollByLines(int lines);
 
   void scrollByPages(int pages);
 
   void scrollIntoView([bool centerIfNeeded]);
+
+  void $dom_setAttribute(String name, String value);
 
   bool matchesSelector(String selectors);
 
@@ -21538,6 +21693,8 @@ interface Event default _EventFactoryProvider {
 
   final String type;
 
+  void $dom_initEvent(String eventTypeArg, bool canBubbleArg, bool cancelableArg);
+
   void preventDefault();
 
   void stopImmediatePropagation();
@@ -21588,7 +21745,13 @@ interface EventSource extends EventTarget default _EventSourceFactoryProvider {
 
   final String url;
 
+  void $dom_addEventListener(String type, EventListener listener, [bool useCapture]);
+
   void close();
+
+  bool $dom_dispatchEvent(Event evt);
+
+  void $dom_removeEventListener(String type, EventListener listener, [bool useCapture]);
 }
 
 interface EventSourceEvents extends Events {
@@ -21620,6 +21783,12 @@ interface Events {
 interface EventTarget {
 
   final Events on;
+
+  void $dom_addEventListener(String type, EventListener listener, [bool useCapture]);
+
+  bool $dom_dispatchEvent(Event event);
+
+  void $dom_removeEventListener(String type, EventListener listener, [bool useCapture]);
 
 }
 // Copyright (c) 2012, the Dart project authors.  Please see the AUTHORS file
@@ -21931,7 +22100,7 @@ interface Float32Array extends ArrayBufferView, List<num> default _TypedArrayFac
 
   Float32Array.fromList(List<num> list);
 
-  Float32Array.fromBuffer(ArrayBuffer buffer);
+  Float32Array.fromBuffer(ArrayBuffer buffer, [int byteOffset, int length]);
 
   static final int BYTES_PER_ELEMENT = 4;
 
@@ -21953,7 +22122,7 @@ interface Float64Array extends ArrayBufferView, List<num> default _TypedArrayFac
 
   Float64Array.fromList(List<num> list);
 
-  Float64Array.fromBuffer(ArrayBuffer buffer);
+  Float64Array.fromBuffer(ArrayBuffer buffer, [int byteOffset, int length]);
 
   static final int BYTES_PER_ELEMENT = 8;
 
@@ -22836,7 +23005,7 @@ interface Int16Array extends ArrayBufferView, List<int> default _TypedArrayFacto
 
   Int16Array.fromList(List<int> list);
 
-  Int16Array.fromBuffer(ArrayBuffer buffer);
+  Int16Array.fromBuffer(ArrayBuffer buffer, [int byteOffset, int length]);
 
   static final int BYTES_PER_ELEMENT = 2;
 
@@ -22858,7 +23027,7 @@ interface Int32Array extends ArrayBufferView, List<int> default _TypedArrayFacto
 
   Int32Array.fromList(List<int> list);
 
-  Int32Array.fromBuffer(ArrayBuffer buffer);
+  Int32Array.fromBuffer(ArrayBuffer buffer, [int byteOffset, int length]);
 
   static final int BYTES_PER_ELEMENT = 4;
 
@@ -22880,7 +23049,7 @@ interface Int8Array extends ArrayBufferView, List<int> default _TypedArrayFactor
 
   Int8Array.fromList(List<int> list);
 
-  Int8Array.fromBuffer(ArrayBuffer buffer);
+  Int8Array.fromBuffer(ArrayBuffer buffer, [int byteOffset, int length]);
 
   static final int BYTES_PER_ELEMENT = 1;
 
@@ -23548,9 +23717,15 @@ interface MessagePort extends EventTarget {
 
   MessagePortEvents get on();
 
+  void $dom_addEventListener(String type, EventListener listener, [bool useCapture]);
+
   void close();
 
+  bool $dom_dispatchEvent(Event evt);
+
   void postMessage(String message, [List messagePorts]);
+
+  void $dom_removeEventListener(String type, EventListener listener, [bool useCapture]);
 
   void start();
 
@@ -23677,6 +23852,8 @@ interface MouseEvent extends UIEvent default _MouseEventFactoryProvider {
   final int x;
 
   final int y;
+
+  void $dom_initMouseEvent(String type, bool canBubble, bool cancelable, Window view, int detail, int screenX, int screenY, int clientX, int clientY, bool ctrlKey, bool altKey, bool shiftKey, bool metaKey, int button, EventTarget relatedTarget);
 }
 // Copyright (c) 2012, the Dart project authors.  Please see the AUTHORS file
 // for details. All rights reserved. Use of this source code is governed by a
@@ -23852,7 +24029,17 @@ interface Node extends EventTarget {
 
   static final int TEXT_NODE = 3;
 
+  final NamedNodeMap $dom_attributes;
+
+  final NodeList $dom_childNodes;
+
+  final Node $dom_firstChild;
+
+  final Node $dom_lastChild;
+
   final Node nextNode;
+
+  final int $dom_nodeType;
 
   final Document document;
 
@@ -23862,6 +24049,8 @@ interface Node extends EventTarget {
 
   String text;
 
+  Node $dom_appendChild(Node newChild);
+
   Node clone(bool deep);
 
   bool contains(Node other);
@@ -23869,6 +24058,10 @@ interface Node extends EventTarget {
   bool hasChildNodes();
 
   Node insertBefore(Node newChild, Node refChild);
+
+  Node $dom_removeChild(Node oldChild);
+
+  Node $dom_replaceChild(Node newChild, Node oldChild);
 
 }
 // Copyright (c) 2012, the Dart project authors.  Please see the AUTHORS file
@@ -23970,6 +24163,8 @@ interface NodeSelector {
 
 
   Element query(String selectors);
+
+  NodeList $dom_querySelectorAll(String selectors);
 
 }
 // Copyright (c) 2012, the Dart project authors.  Please see the AUTHORS file
@@ -25258,6 +25453,8 @@ interface SVGDescElement extends SVGElement, SVGLangSpace, SVGStylable {
 interface SVGDocument extends Document {
 
   final SVGSVGElement rootElement;
+
+  Event $dom_createEvent(String eventType);
 }
 // Copyright (c) 2012, the Dart project authors.  Please see the AUTHORS file
 // for details. All rights reserved. Use of this source code is governed by a
@@ -25305,6 +25502,12 @@ interface SVGElementInstance extends EventTarget {
   final SVGElementInstance parentNode;
 
   final SVGElementInstance previousSibling;
+
+  void $dom_addEventListener(String type, EventListener listener, [bool useCapture]);
+
+  bool $dom_dispatchEvent(Event event);
+
+  void $dom_removeEventListener(String type, EventListener listener, [bool useCapture]);
 }
 
 interface SVGElementInstanceEvents extends Events {
@@ -27157,6 +27360,8 @@ interface SVGStringList {
 
 interface SVGStylable {
 
+  final SVGAnimatedString $dom_svgClassName;
+
   final CSSStyleDeclaration style;
 
   CSSValue getPresentationAttribute(String name);
@@ -27954,21 +28159,20 @@ interface SpeechRecognitionResultList {
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-// WARNING: Do not edit - generated code.
+interface Storage extends Map<String, String> {
 
-interface Storage {
+  final int $dom_length;
 
-  final int length;
+  void $dom_clear();
 
-  void clear();
+  String $dom_getItem(String key);
 
-  String getItem(String key);
+  String $dom_key(int index);
 
-  String key(int index);
+  void $dom_removeItem(String key);
 
-  void removeItem(String key);
+  void $dom_setItem(String key, String data);
 
-  void setItem(String key, String data);
 }
 // Copyright (c) 2012, the Dart project authors.  Please see the AUTHORS file
 // for details. All rights reserved. Use of this source code is governed by a
@@ -28708,7 +28912,7 @@ interface Uint16Array extends ArrayBufferView, List<int> default _TypedArrayFact
 
   Uint16Array.fromList(List<int> list);
 
-  Uint16Array.fromBuffer(ArrayBuffer buffer);
+  Uint16Array.fromBuffer(ArrayBuffer buffer, [int byteOffset, int length]);
 
   static final int BYTES_PER_ELEMENT = 2;
 
@@ -28730,7 +28934,7 @@ interface Uint32Array extends ArrayBufferView, List<int> default _TypedArrayFact
 
   Uint32Array.fromList(List<int> list);
 
-  Uint32Array.fromBuffer(ArrayBuffer buffer);
+  Uint32Array.fromBuffer(ArrayBuffer buffer, [int byteOffset, int length]);
 
   static final int BYTES_PER_ELEMENT = 4;
 
@@ -28752,7 +28956,7 @@ interface Uint8Array extends ArrayBufferView, List<int> default _TypedArrayFacto
 
   Uint8Array.fromList(List<int> list);
 
-  Uint8Array.fromBuffer(ArrayBuffer buffer);
+  Uint8Array.fromBuffer(ArrayBuffer buffer, [int byteOffset, int length]);
 
   static final int BYTES_PER_ELEMENT = 1;
 
@@ -28774,7 +28978,7 @@ interface Uint8ClampedArray extends Uint8Array default _TypedArrayFactoryProvide
 
   Uint8ClampedArray.fromList(List<int> list);
 
-  Uint8ClampedArray.fromBuffer(ArrayBuffer buffer);
+  Uint8ClampedArray.fromBuffer(ArrayBuffer buffer, [int byteOffset, int length]);
 
   final int length;
 
@@ -29955,7 +30159,13 @@ interface WebSocket extends EventTarget default _WebSocketFactoryProvider {
 
   final String url;
 
+  void $dom_addEventListener(String type, EventListener listener, [bool useCapture]);
+
   void close([int code, String reason]);
+
+  bool $dom_dispatchEvent(Event evt);
+
+  void $dom_removeEventListener(String type, EventListener listener, [bool useCapture]);
 
   bool send(String data);
 }
@@ -30134,6 +30344,8 @@ interface Window extends EventTarget {
 
   final Window window;
 
+  void $dom_addEventListener(String type, EventListener listener, [bool useCapture]);
+
   void alert(String message);
 
   String atob(String string);
@@ -30152,9 +30364,13 @@ interface Window extends EventTarget {
 
   bool confirm(String message);
 
+  bool $dom_dispatchEvent(Event evt);
+
   bool find(String string, bool caseSensitive, bool backwards, bool wrap, bool wholeWord, bool searchInFrames, bool showDialog);
 
   void focus();
+
+  CSSStyleDeclaration $dom_getComputedStyle(Element element, String pseudoElement);
 
   CSSRuleList getMatchedCSSRules(Element element, String pseudoElement);
 
@@ -30177,6 +30393,8 @@ interface Window extends EventTarget {
   String prompt(String message, String defaultValue);
 
   void releaseEvents();
+
+  void $dom_removeEventListener(String type, EventListener listener, [bool useCapture]);
 
   void resizeBy(num x, num y);
 
@@ -30534,6 +30752,10 @@ interface XMLHttpRequest extends EventTarget default _XMLHttpRequestFactoryProvi
 
   void abort();
 
+  void $dom_addEventListener(String type, EventListener listener, [bool useCapture]);
+
+  bool $dom_dispatchEvent(Event evt);
+
   String getAllResponseHeaders();
 
   String getResponseHeader(String header);
@@ -30541,6 +30763,8 @@ interface XMLHttpRequest extends EventTarget default _XMLHttpRequestFactoryProvi
   void open(String method, String url, [bool async, String user, String password]);
 
   void overrideMimeType(String override);
+
+  void $dom_removeEventListener(String type, EventListener listener, [bool useCapture]);
 
   void send([var data]);
 
@@ -30604,6 +30828,12 @@ interface XMLHttpRequestProgressEvent extends ProgressEvent {
 interface XMLHttpRequestUpload extends EventTarget {
 
   XMLHttpRequestUploadEvents get on();
+
+  void $dom_addEventListener(String type, EventListener listener, [bool useCapture]);
+
+  bool $dom_dispatchEvent(Event evt);
+
+  void $dom_removeEventListener(String type, EventListener listener, [bool useCapture]);
 }
 
 interface XMLHttpRequestUploadEvents extends Events {
@@ -31537,16 +31767,11 @@ void _completeMeasurementFutures() {
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-class _TextFactoryProvider {
-
-  factory Text(String data) => _document._createTextNode(data);
-}
-
 class _EventFactoryProvider {
   factory Event(String type, [bool canBubble = true,
       bool cancelable = true]) {
-    final _EventImpl e = _document._createEvent("Event");
-    e._initEvent(type, canBubble, cancelable);
+    final _EventImpl e = _document.$dom_createEvent("Event");
+    e.$dom_initEvent(type, canBubble, cancelable);
     return e;
   }
 }
@@ -31557,8 +31782,8 @@ class _MouseEventFactoryProvider {
       [bool canBubble = true, bool cancelable = true, bool ctrlKey = false,
       bool altKey = false, bool shiftKey = false, bool metaKey = false,
       EventTarget relatedTarget = null]) {
-    final e = _document._createEvent("MouseEvent");
-    e._initMouseEvent(type, canBubble, cancelable, view, detail,
+    final e = _document.$dom_createEvent("MouseEvent");
+    e.$dom_initMouseEvent(type, canBubble, cancelable, view, detail,
         screenX, screenY, clientX, clientY, ctrlKey, altKey, shiftKey, metaKey,
         button, relatedTarget);
     return e;
@@ -31575,62 +31800,6 @@ class _CSSStyleDeclarationFactoryProvider {
   factory CSSStyleDeclaration() {
     return new CSSStyleDeclaration.css('');
   }
-}
-
-final _START_TAG_REGEXP = const RegExp('<(\\w+)');
-class _ElementFactoryProvider {
-  static final _CUSTOM_PARENT_TAG_MAP = const {
-    'body' : 'html',
-    'head' : 'html',
-    'caption' : 'table',
-    'td': 'tr',
-    'colgroup': 'table',
-    'col' : 'colgroup',
-    'tr' : 'tbody',
-    'tbody' : 'table',
-    'tfoot' : 'table',
-    'thead' : 'table',
-    'track' : 'audio',
-  };
-
-  /** @domName Document.createElement */
-  factory Element.html(String html) {
-    // TODO(jacobr): this method can be made more robust and performant.
-    // 1) Cache the dummy parent elements required to use innerHTML rather than
-    //    creating them every call.
-    // 2) Verify that the html does not contain leading or trailing text nodes.
-    // 3) Verify that the html does not contain both <head> and <body> tags.
-    // 4) Detatch the created element from its dummy parent.
-    String parentTag = 'div';
-    String tag;
-    final match = _START_TAG_REGEXP.firstMatch(html);
-    if (match !== null) {
-      tag = match.group(1).toLowerCase();
-      if (_CUSTOM_PARENT_TAG_MAP.containsKey(tag)) {
-        parentTag = _CUSTOM_PARENT_TAG_MAP[tag];
-      }
-    }
-    final _ElementImpl temp = new Element.tag(parentTag);
-    temp.innerHTML = html;
-
-    Element element;
-    if (temp.elements.length == 1) {
-      element = temp.elements.first;
-    } else if (parentTag == 'html' && temp.elements.length == 2) {
-      // Work around for edge case in WebKit and possibly other browsers where
-      // both body and head elements are created even though the inner html
-      // only contains a head or body element.
-      element = temp.elements[tag == 'head' ? 0 : 1];
-    } else {
-      throw new IllegalArgumentException('HTML had ${temp.elements.length} ' +
-          'top level elements but 1 expected');
-    }
-    element.remove();
-    return element;
-  }
-
-  /** @domName Document.createElement */
-  factory Element.tag(String tag) => _document._createElement(tag);
 }
 
 class _DocumentFragmentFactoryProvider {
@@ -31670,7 +31839,7 @@ class _DocumentFragmentFactoryProvider {
 class _SVGElementFactoryProvider {
   factory SVGElement.tag(String tag) {
     final Element temp =
-      _document._createElementNS("http://www.w3.org/2000/svg", tag);
+      _document.$dom_createElementNS("http://www.w3.org/2000/svg", tag);
     return temp;
   }
 
@@ -31711,43 +31880,96 @@ class _AudioContextFactoryProvider {
 ''';
 }
 
+class _PointFactoryProvider {
+
+  factory Point(num x, num y) native 'return new WebKitPoint(x, y);';
+}
+
+class _WebSocketFactoryProvider {
+
+  factory WebSocket(String url) native '''return new WebSocket(url);''';
+}
+
+class _TextFactoryProvider {
+  factory Text(String data) native "return document.createTextNode(data);";
+}
+// Copyright (c) 2012, the Dart project authors.  Please see the AUTHORS file
+// for details. All rights reserved. Use of this source code is governed by a
+// BSD-style license that can be found in the LICENSE file.
+
 class _TypedArrayFactoryProvider {
 
   factory Float32Array(int length) => _F32(length);
   factory Float32Array.fromList(List<num> list) => _F32(ensureNative(list));
-  factory Float32Array.fromBuffer(ArrayBuffer buffer) => _F32(buffer);
+  factory Float32Array.fromBuffer(ArrayBuffer buffer,
+                                  [int byteOffset = 0, int length]) {
+    if (length == null) return _F32_2(buffer, byteOffset);
+    return _F32_3(buffer, byteOffset, length);
+  }
 
   factory Float64Array(int length) => _F64(length);
   factory Float64Array.fromList(List<num> list) => _F64(ensureNative(list));
-  factory Float64Array.fromBuffer(ArrayBuffer buffer) => _F64(buffer);
+  factory Float64Array.fromBuffer(ArrayBuffer buffer,
+                                  [int byteOffset = 0, int length]) {
+    if (length == null) return _F64_2(buffer, byteOffset);
+    return _F64_3(buffer, byteOffset, length);
+  }
 
   factory Int8Array(int length) => _I8(length);
   factory Int8Array.fromList(List<num> list) => _I8(ensureNative(list));
-  factory Int8Array.fromBuffer(ArrayBuffer buffer) => _I8(buffer);
+  factory Int8Array.fromBuffer(ArrayBuffer buffer,
+                               [int byteOffset = 0, int length]) {
+    if (length == null) return _I8_2(buffer, byteOffset);
+    return _I8_3(buffer, byteOffset, length);
+  }
 
   factory Int16Array(int length) => _I16(length);
   factory Int16Array.fromList(List<num> list) => _I16(ensureNative(list));
-  factory Int16Array.fromBuffer(ArrayBuffer buffer) => _I16(buffer);
+  factory Int16Array.fromBuffer(ArrayBuffer buffer,
+                                [int byteOffset = 0, int length]) {
+    if (length == null) return _I16_2(buffer, byteOffset);
+    return _I16_3(buffer, byteOffset, length);
+  }
 
   factory Int32Array(int length) => _I32(length);
   factory Int32Array.fromList(List<num> list) => _I32(ensureNative(list));
-  factory Int32Array.fromBuffer(ArrayBuffer buffer) => _I32(buffer);
+  factory Int32Array.fromBuffer(ArrayBuffer buffer,
+                                [int byteOffset = 0, int length]) {
+    if (length == null) return _I32_2(buffer, byteOffset);
+    return _I32_3(buffer, byteOffset, length);
+  }
 
   factory Uint8Array(int length) => _U8(length);
   factory Uint8Array.fromList(List<num> list) => _U8(ensureNative(list));
-  factory Uint8Array.fromBuffer(ArrayBuffer buffer) => _U8(buffer);
+  factory Uint8Array.fromBuffer(ArrayBuffer buffer,
+                                [int byteOffset = 0, int length]) {
+    if (length == null) return _U8_2(buffer, byteOffset);
+    return _U8_3(buffer, byteOffset, length);
+  }
 
   factory Uint16Array(int length) => _U16(length);
   factory Uint16Array.fromList(List<num> list) => _U16(ensureNative(list));
-  factory Uint16Array.fromBuffer(ArrayBuffer buffer) => _U16(buffer);
+  factory Uint16Array.fromBuffer(ArrayBuffer buffer,
+                                 [int byteOffset = 0, int length]) {
+    if (length == null) return _U16_2(buffer, byteOffset);
+    return _U16_3(buffer, byteOffset, length);
+  }
 
   factory Uint32Array(int length) => _U32(length);
   factory Uint32Array.fromList(List<num> list) => _U32(ensureNative(list));
-  factory Uint32Array.fromBuffer(ArrayBuffer buffer) => _U32(buffer);
+  factory Uint32Array.fromBuffer(ArrayBuffer buffer,
+                                 [int byteOffset = 0, int length]) {
+    if (length == null) return _U32_2(buffer, byteOffset);
+    return _U32_3(buffer, byteOffset, length);
+  }
 
   factory Uint8ClampedArray(int length) => _U8C(length);
   factory Uint8ClampedArray.fromList(List<num> list) => _U8C(ensureNative(list));
-  factory Uint8ClampedArray.fromBuffer(ArrayBuffer buffer) => _U8C(buffer);
+  factory Uint8ClampedArray.fromBuffer(ArrayBuffer buffer,
+                                       [int byteOffset = 0, int length]) {
+    if (length == null) return _U8C_2(buffer, byteOffset);
+    return _U8C_3(buffer, byteOffset, length);
+  }
 
   static Float32Array _F32(arg) native 'return new Float32Array(arg);';
   static Float64Array _F64(arg) native 'return new Float64Array(arg);';
@@ -31759,34 +31981,49 @@ class _TypedArrayFactoryProvider {
   static Uint32Array _U32(arg) native 'return new Uint32Array(arg);';
   static Uint8ClampedArray _U8C(arg) native 'return new Uint8ClampedArray(arg);';
 
+  static Float32Array _F32_2(arg1, arg2) native 'return new Float32Array(arg1, arg2);';
+  static Float64Array _F64_2(arg1, arg2) native 'return new Float64Array(arg1, arg2);';
+  static Int8Array _I8_2(arg1, arg2) native 'return new Int8Array(arg1, arg2);';
+  static Int16Array _I16_2(arg1, arg2) native 'return new Int16Array(arg1, arg2);';
+  static Int32Array _I32_2(arg1, arg2) native 'return new Int32Array(arg1, arg2);';
+  static Uint8Array _U8_2(arg1, arg2) native 'return new Uint8Array(arg1, arg2);';
+  static Uint16Array _U16_2(arg1, arg2) native 'return new Uint16Array(arg1, arg2);';
+  static Uint32Array _U32_2(arg1, arg2) native 'return new Uint32Array(arg1, arg2);';
+  static Uint8ClampedArray _U8C_2(arg1, arg2) native 'return new Uint8ClampedArray(arg1, arg2);';
+
+  static Float32Array _F32_3(arg1, arg2, arg3) native 'return new Float32Array(arg1, arg2, arg3);';
+  static Float64Array _F64_3(arg1, arg2, arg3) native 'return new Float64Array(arg1, arg2, arg3);';
+  static Int8Array _I8_3(arg1, arg2, arg3) native 'return new Int8Array(arg1, arg2, arg3);';
+  static Int16Array _I16_3(arg1, arg2, arg3) native 'return new Int16Array(arg1, arg2, arg3);';
+  static Int32Array _I32_3(arg1, arg2, arg3) native 'return new Int32Array(arg1, arg2, arg3);';
+  static Uint8Array _U8_3(arg1, arg2, arg3) native 'return new Uint8Array(arg1, arg2, arg3);';
+  static Uint16Array _U16_3(arg1, arg2, arg3) native 'return new Uint16Array(arg1, arg2, arg3);';
+  static Uint32Array _U32_3(arg1, arg2, arg3) native 'return new Uint32Array(arg1, arg2, arg3);';
+  static Uint8ClampedArray _U8C_3(arg1, arg2, arg3) native 'return new Uint8ClampedArray(arg1, arg2, arg3);';
+
+
+  // Ensures that [list] is a JavaScript Array or a typed array.  If necessary,
+  // copies the list.
   static ensureNative(List list) => list;  // TODO: make sure.
-}
-
-class _PointFactoryProvider {
-
-  factory Point(num x, num y) native 'return new WebKitPoint(x, y);';
-}
-
-class _WebSocketFactoryProvider {
-
-  factory WebSocket(String url) native '''return new WebSocket(url);''';
 }
 // Copyright (c) 2012, the Dart project authors.  Please see the AUTHORS file
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
 // TODO(rnystrom): add a way to supress public classes from DartDoc output.
+// TODO(jacobr): we can remove this class now that we are using the $dom_
+// convention for deprecated methods rather than truly private methods.
 /**
  * This class is intended for testing purposes only.
  */
 class Testing {
   static void addEventListener(EventTarget target, String type, EventListener listener, bool useCapture) {
     final _EventTargetImpl targetImpl = target;
-    targetImpl._addEventListener(type, listener, useCapture);
+    targetImpl.$dom_addEventListener(type, listener, useCapture);
   }
   static void removeEventListener(EventTarget target, String type, EventListener listener, bool useCapture) {
     final _EventTargetImpl targetImpl = target;
-    targetImpl._removeEventListener(type, listener, useCapture);
+    targetImpl.$dom_removeEventListener(type, listener, useCapture);
   }
 
 }// Copyright (c) 2011, the Dart project authors.  Please see the AUTHORS file

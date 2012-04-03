@@ -6,7 +6,7 @@ class _EventsImpl implements Events {
   /* Raw event target. */
   // TODO(jacobr): it would be nice if we could specify this as
   // _EventTargetImpl or EventTarget
-  final var _ptr;
+  final Dynamic _ptr;
 
   _EventsImpl(this._ptr);
 
@@ -20,7 +20,7 @@ class _EventsImpl implements Events {
 class _EventListenerListImpl implements EventListenerList {
   
   // TODO(jacobr): make this _EventTargetImpl
-  final var _ptr;
+  final Dynamic _ptr;
   final String _type;
 
   _EventListenerListImpl(this._ptr, this._type);
@@ -43,15 +43,15 @@ class _EventListenerListImpl implements EventListenerList {
     // TODO(jacobr): what is the correct behavior here. We could alternately
     // force the event to have the expected type.
     assert(evt.type == _type);
-    return _ptr._dispatchEvent(evt);
+    return _ptr.$dom_dispatchEvent(evt);
   }
 
   void _add(EventListener listener, bool useCapture) {
-    _ptr._addEventListener(_type, listener, useCapture);
+    _ptr.$dom_addEventListener(_type, listener, useCapture);
   }
 
   void _remove(EventListener listener, bool useCapture) {
-    _ptr._removeEventListener(_type, listener, useCapture);
+    _ptr.$dom_removeEventListener(_type, listener, useCapture);
   }
 }
 

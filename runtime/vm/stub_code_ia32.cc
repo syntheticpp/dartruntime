@@ -744,9 +744,7 @@ void StubCode::GenerateAllocateArrayStub(Assembler* assembler) {
   __ pushl(raw_null);  // Setup space on stack for return value.
   __ pushl(EDX);  // Array length as Smi.
   __ pushl(ECX);  // Element type.
-  __ pushl(raw_null);  // Null instantiator.
   __ CallRuntimeFromStub(kAllocateArrayRuntimeEntry);
-  __ popl(EAX);  // Pop instantiator.
   __ popl(EAX);  // Pop element type argument.
   __ popl(EDX);  // Pop array length argument.
   __ popl(EAX);  // Pop return value from return slot.
@@ -1125,12 +1123,13 @@ void StubCode::GenerateAllocationStubForClass(Assembler* assembler,
     if (is_cls_parameterized) {
       __ movl(ECX, EBX);
       // A new InstantiatedTypeArguments object only needs to be allocated if
-      // the instantiator is non-null.
-      Label null_instantiator;
-      __ cmpl(Address(ESP, kInstantiatorTypeArgumentsOffset), raw_null);
-      __ j(EQUAL, &null_instantiator, Assembler::kNearJump);
+      // the instantiator is provided (not kNoInstantiator, but may be null).
+      Label no_instantiator;
+      __ cmpl(Address(ESP, kInstantiatorTypeArgumentsOffset),
+              Immediate(Smi::RawValue(StubCode::kNoInstantiator)));
+      __ j(EQUAL, &no_instantiator, Assembler::kNearJump);
       __ addl(EBX, Immediate(type_args_size));
-      __ Bind(&null_instantiator);
+      __ Bind(&no_instantiator);
       // ECX: potential new object end and, if ECX != EBX, potential new
       // InstantiatedTypeArguments object start.
     }
@@ -1272,7 +1271,7 @@ void StubCode::GenerateAllocationStubForClass(Assembler* assembler,
     __ pushl(EDX);  // Push type arguments of instantiator.
   } else {
     __ pushl(raw_null);  // Push null type arguments.
-    __ pushl(raw_null);  // Push null instantiator.
+    __ pushl(Immediate(Smi::RawValue(StubCode::kNoInstantiator)));
   }
   __ CallRuntimeFromStub(kAllocateObjectRuntimeEntry);  // Allocate object.
   __ popl(EAX);  // Pop argument (instantiator).
@@ -1754,6 +1753,86 @@ void StubCode::GenerateBreakpointDynamicStub(Assembler* assembler) {
   __ Bind(&ic_cache_one_arg);
   __ jmp(&StubCode::OneArgCheckInlineCacheLabel());
 }
+
+
+// Check if an instance class is a subtype of class/interface using simple
+// superchain and interface array traversal. Does not take type parameters into
+// account.
+// EAX: instance (preserved)
+// EDX: class/interface to test against (is class of instance a subtype of it).
+//      (preserved).
+// Result in EBX: 1 is subtype, 0 maybe not.
+// Destroys EBX, ECX.
+void StubCode::GenerateIsRawSubTypeStub(Assembler* assembler) {
+  const Immediate raw_null =
+      Immediate(reinterpret_cast<intptr_t>(Object::null()));
+  Label test_class, not_found, found, class_loaded_in_ECX, smi_value;
+  __ EnterFrame(0);
+  __ testl(EAX, Immediate(kSmiTagMask));
+  __ j(ZERO, &smi_value, Assembler::kNearJump);
+  __ movl(ECX, FieldAddress(EAX, Object::class_offset()));
+  __ jmp(&class_loaded_in_ECX, Assembler::kNearJump);
+  __ Bind(&smi_value);
+  __ movl(ECX, FieldAddress(CTX, Context::isolate_offset()));
+  __ movl(ECX, Address(ECX, Isolate::object_store_offset()));
+  __ movl(ECX, Address(ECX, ObjectStore::smi_class_offset()));
+  __ Bind(&class_loaded_in_ECX);
+
+  __ movzxb(EBX, FieldAddress(EDX, Class::is_interface_offset()));
+  // Check if we are comparing against class or interface.
+  __ cmpl(EBX, Immediate(0));
+  __ j(EQUAL, &test_class, Assembler::kNearJump);
+
+  // Get interfaces array from instance class.
+  __ movl(EBX, FieldAddress(ECX, Class::interfaces_offset()));
+  __ cmpl(EBX, raw_null);
+  __ j(EQUAL, &not_found, Assembler::kNearJump);
+  __ movl(EDI, FieldAddress(EBX, Array::length_offset()));
+  // EDI: array index.
+  // EBX: interface array.
+  // EDX: interface searched
+  Label array_loop;
+  __ Bind(&array_loop);
+  __ subl(EDI, Immediate(Smi::RawValue(1)));
+  // __ cmpl(EDI, Immediate(0));
+  __ j(LESS, &not_found, Assembler::kNearJump);
+  // EDI is Smi therefore TIMES_2 instead of TIMES_4.
+  // Get type from array.
+  __ movl(ECX, FieldAddress(EBX, EDI, TIMES_2, Array::data_offset()));
+  __ movl(ECX, FieldAddress(ECX, Type::type_class_offset()));
+  __ cmpl(ECX, EDX);
+  __ j(EQUAL, &found, Assembler::kNearJump);
+  __ jmp(&array_loop, Assembler::kNearJump);
+
+  __ Bind(&not_found);
+  __ xorl(EBX, EBX);
+  __ LeaveFrame();
+  __ ret();
+
+  __ Bind(&found);
+  __ movl(EBX, Immediate(1));
+  __ LeaveFrame();
+  __ ret();
+
+  __ Bind(&test_class);
+  // EDX: test class.
+  __ cmpl(ECX, EDX);
+  __ j(EQUAL, &found, Assembler::kNearJump);
+
+  // Check superclasses using a loop (faster than runtime call).
+  Label super_loop;
+  __ Bind(&super_loop);
+  // ECX: class -> super.
+  __ movl(ECX, FieldAddress(ECX, Class::super_type_offset()));
+  // The supertype of Object is a null object.
+  __ cmpl(ECX, raw_null);
+  __ j(EQUAL, &not_found, Assembler::kNearJump);
+  __ movl(ECX, FieldAddress(ECX, Type::type_class_offset()));
+  __ cmpl(EDX, ECX);
+  __ j(NOT_EQUAL, &super_loop, Assembler::kNearJump);
+  __ jmp(&found, Assembler::kNearJump);
+}
+
 
 }  // namespace dart
 

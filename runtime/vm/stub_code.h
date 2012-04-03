@@ -33,6 +33,7 @@ class RawCode;
   V(Deoptimize)                                                                \
   V(BreakpointStatic)                                                          \
   V(BreakpointReturn)                                                          \
+  V(IsRawSubType)                                                              \
 
 
 // Is it permitted for the stubs above to refer to Object::null(), which is
@@ -144,8 +145,10 @@ class StubCode {
   static RawCode* GetAllocationStubForClass(const Class& cls);
   static RawCode* GetAllocationStubForClosure(const Function& func);
 
+  static const intptr_t kNoInstantiator = 0;
+
  private:
-  static const int kStubCodeSize = 4 * KB;
+  static const intptr_t kStubCodeSize = 4 * KB;
 
 #define STUB_CODE_GENERATE(name)                                               \
   static void Generate##name##Stub(Assembler* assembler);
