@@ -174,7 +174,7 @@ t_removeDartFiles(${for_corelib_in} lib/isolate.dart lib/mirrors_impl.dart)
 t_findDartFiles(../corelib/src/implementation)
 embed_boostrap_dart(corelib_impl)
 embed_boostrap_dart(isolate ../lib/isolate/isolate_api.dart lib/isolate.dart)
-embed_boostrap_dart(mirrors ../lib/mirrors/mirrors.dart     )
+embed_boostrap_dart(mirrors ../lib/mirrors/mirrors.dart lib/mirrors_impl.dart)
 t_includeDirectories(.)
 t_makeLibrary()
 
