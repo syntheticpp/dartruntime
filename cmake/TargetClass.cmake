@@ -90,8 +90,12 @@ endmacro()
 
 
 macro(t_makeLibrary)
+    set(type ${ARGN})
+    if(NOT type)
+        set(type STATIC)
+    endif()
     list(SORT t_sources)
-    add_library(${t_name} STATIC ${t_sources} ${t_headers})
+    add_library(${t_name} ${type} ${t_sources} ${t_headers})
     if(verbose)
         foreach(_it ${t_sources})
             message(STATUS "Building library '${t_name}' with: ${_it}")
@@ -101,6 +105,19 @@ macro(t_makeLibrary)
     _addDefinitions()
     _addCompileFlags()
     _includeDirectories()
+endmacro()
+
+
+macro(t_install)
+    install(TARGETS ${t_name}
+            RUNTIME DESTINATION bin
+            LIBRARY DESTINATION lib
+            ARCHIVE DESTINATION lib/static)
+endmacro()
+
+
+macro(t_installFiles dir)
+    install(FILES ${ARGN} DESTINATION ${dir})
 endmacro()
 
 

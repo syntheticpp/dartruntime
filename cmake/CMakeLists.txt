@@ -1,4 +1,4 @@
-# Copyright (c) 2011, Peter Kümmel
+# Copyright (c) 2011, 2012 Peter Kümmel
 # All rights reserved. Use of this source code is governed by a
 # BSD-style license that can be found in the LICENSE file.
 
@@ -39,12 +39,14 @@ else()
 endif()
 
 
+set(libtype STATIC)
 if(APPLE)
     include(Apple)
 elseif(UNIX)
     include(Linux)
 elseif(WIN32)
     include(Windows)
+    set(libtype STATIC)
 endif()
 
 
@@ -107,6 +109,28 @@ set(utf_sources_dart
     ../lib/utf/utf8.dart
     ../lib/utf/utf16.dart
     ../lib/utf/utf32.dart)
+
+set(lib_sources_dart
+    lib/byte_array.dart
+    lib/error.dart
+    lib/expando_impl.dart
+    lib/literal_factory.dart
+    lib/object.dart
+    lib/weak_property.dart)
+
+set(lib_impl_sources_dart
+    lib/array.dart
+    lib/bool.dart
+    lib/date_patch.dart
+    lib/double.dart
+    lib/growable_array.dart
+    lib/immutable_map.dart
+    lib/integers.dart
+    lib/math.dart
+    lib/regexp_patch.dart
+    lib/stopwatch_patch.dart
+    lib/string.dart)
+
 
 t_init(dart_builtin)
 t_findHeaders(bin .h)
@@ -188,28 +212,7 @@ macro(embed_boostrap_dart name postfix)
     t_embedDartFiles(bin/builtin_in.cc ${gen_dir}/${name}.cc vm/bootstrap.h dart::Bootstrap::${name}${postfix})
 endmacro()
 
-set(lib_sources_dart
-    lib/byte_array.dart
-    lib/error.dart
-    lib/expando_impl.dart
-    lib/literal_factory.dart
-    lib/object.dart
-    lib/weak_property.dart)
-
-set(lib_impl_sources_dart
-    lib/array.dart
-    lib/bool.dart
-    lib/date_patch.dart
-    lib/double.dart
-    lib/growable_array.dart
-    lib/immutable_map.dart
-    lib/integers.dart
-    lib/math.dart
-    lib/regexp_patch.dart
-    lib/stopwatch_patch.dart
-    lib/string.dart)
-
-t_init(dart_corelib)
+t_init(dartcore)
 t_addSources(vm/bootstrap.cc)
 
 t_findDartFiles(../corelib/src)
@@ -225,19 +228,19 @@ embed_boostrap_dart(math_patch _ lib/math_patch.dart)
 embed_boostrap_dart(mirrors _source_ lib/empty_source.dart)
 embed_boostrap_dart(mirrors_patch _ ../lib/mirrors/mirrors.dart lib/mirrors_impl.dart)
 t_includeDirectories(.)
-t_makeLibrary()
-
+t_makeLibrary(${libtype})
+t_install()
 
 t_init(dart_no_snapshot)
 t_addSources(bin/main.cc bin/builtin.cc bin/snapshot_empty.cc)
-t_linkLibraries(dart_corelib)
+t_linkLibraries(dartcore)
 t_includeDirectories(.)
 t_makeExecutable()
 
 
 t_init(gen_snapshot)
 t_addSources(bin/gen_snapshot.cc bin/builtin.cc)
-t_linkLibraries(dart_corelib)
+t_linkLibraries(dartcore)
 t_includeDirectories(.)
 t_makeExecutable()
 
@@ -246,9 +249,12 @@ t_init(dart)
 t_addSources(bin/main.cc bin/builtin_nolib.cc)
 embed_builtin_dart(web ../lib/web/web.dart)
 t_addSnapshotFile(bin/snapshot_in.cc ${gen_dir}/snapshot_gen gen_snapshot)
-t_linkLibraries(dart_corelib)
+t_linkLibraries(dartcore)
 t_includeDirectories(.)
 t_makeExecutable()
+t_install()
+
+t_installFiles(include/dart ../runtime/include/dart_api.h ../runtime/include/dart_debugger_api.h)
 
 
 #
@@ -268,7 +274,7 @@ if(tests)
     t_includeDirectoriesAbsolute(${gen_dir})
     t_includeDirectories(.)
     t_addDefinitions(TESTING)
-    t_linkLibraries(dart_corelib)
+    t_linkLibraries(dartcore)
     t_makeTest()
 
 
@@ -286,7 +292,7 @@ if(bind)
         foreach(_it ${ARGN})
             t_init(${_prefix}${_it})
             t_addSources(${_dir}/${_prefix}${_it}.cc)
-            t_linkLibraries(dart_corelib)
+            t_linkLibraries(dartcore)
             t_includeDirectories(include)
             t_includeDirectories(.) # needed because dart_api.h isn't complete
             t_makeTest()
