@@ -54,6 +54,8 @@ endif()
 
 if(release)
     set(CMAKE_BUILD_TYPE Release)
+else()
+    set(CMAKE_BUILD_TYPE Debug)
 endif()
 if(verbose)
     message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
@@ -83,6 +85,7 @@ macro(t_embed_builtin_dart_concat name)
     t_setDartFiles(${gen_dir}/${name}.dart)
     t_embed_builtin_dart(${name})
 endmacro()
+
 
 set(crypto_sources_dart
     ../lib/crypto/crypto_vm.dart
@@ -216,10 +219,10 @@ t_makeLibrary()
 
 set(libdart_withcore
     libdart_api
-    libdart_builtin
+    libdart_vm
     libdart_lib_withcore
     libdart_lib
-    libdart_vm
+    libdart_builtin
     libjscre
     libdouble_conversion
     )
@@ -245,8 +248,10 @@ t_init(dart_plain)
 t_addSources(bin/main.cc bin/builtin_nolib.cc bin/snapshot_empty.cc)
 t_addSources(vm/bootstrap_nocorelib.cc)
 t_linkLibraries(
+    libdart_api
     libdart_lib
     libdart_vm
+    libdart_builtin
     libjscre
     libdouble_conversion)
 t_includeDirectories(.)
@@ -254,7 +259,7 @@ t_makeExecutable()
 
 t_init(dart_no_snapshot)
 t_addSources(bin/main.cc bin/builtin.cc bin/snapshot_empty.cc)
-t_linkLibraries(libdart_lib_withcore)
+t_linkLibraries(${libdart_withcore})
 t_includeDirectories(.)
 t_makeExecutable()
 

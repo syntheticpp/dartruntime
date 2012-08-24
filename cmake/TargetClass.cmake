@@ -126,9 +126,10 @@ endmacro()
 macro(t_makeExecutable)
     list(SORT t_sources)
     add_executable(${t_name} ${t_sources} ${t_headers})
-    list(APPEND _libdarts ${t_libraries})
     if(LINUX OR APPLE)
-        list(APPEND _libdarts ${t_libraries} ${_libdarts}) # no -Wl-*group on Mac
+        set(_libdarts ${t_libraries} ${t_libraries}) # no -Wl-*group on Mac
+    else()
+        set(_libdarts ${t_libraries})
     endif()
     if(verbose)
         foreach(_it ${t_sources})
