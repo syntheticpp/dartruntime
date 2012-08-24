@@ -1,4 +1,4 @@
-# Copyright (c) 2011, Peter Kümmel
+# Copyright (c) 2011,2012 Peter Kümmel
 # All rights reserved. Use of this source code is governed by a
 # BSD-style license that can be found in the LICENSE file.
 
@@ -90,12 +90,9 @@ endmacro()
 
 
 macro(t_makeLibrary)
-    set(type ${ARGN})
-    if(NOT type)
-        set(type STATIC)
-    endif()
     list(SORT t_sources)
-    add_library(${t_name} ${type} ${t_sources} ${t_headers})
+    add_library(${t_name} STATIC ${t_sources} ${t_headers})
+    set_target_properties(${t_name} PROPERTIES OUTPUT_NAME ${t_name})
     if(verbose)
         foreach(_it ${t_sources})
             message(STATUS "Building library '${t_name}' with: ${_it}")
@@ -129,7 +126,6 @@ endmacro()
 macro(t_makeExecutable)
     list(SORT t_sources)
     add_executable(${t_name} ${t_sources} ${t_headers})
-    set(_libdarts dart_api dart_vm dart_builtin dart_lib)
     list(APPEND _libdarts ${t_libraries})
     if(LINUX OR APPLE)
         list(APPEND _libdarts ${t_libraries} ${_libdarts}) # no -Wl-*group on Mac
@@ -139,7 +135,7 @@ macro(t_makeExecutable)
             message(STATUS "Building executable '${t_name}' with: ${_it}")
         endforeach()
     endif()
-    target_link_libraries(${t_name} ${_libdarts} jscre double_conversion ${libopenssl} ${librt})
+    target_link_libraries(${t_name} ${_libdarts} ${libopenssl} ${librt})
     _addDependencies()
     _addDefinitions()
     _addCompileFlags()
