@@ -3,8 +3,14 @@
 # BSD-style license that can be found in the LICENSE file.
 
 
+if(dartruntime_dir)
+    set(CMAKE_MODULE_PATH ${dartruntime_dir}/cmake)
+else()
+    get_filename_component(dartruntime_dir ${CMAKE_CURRENT_SOURCE_DIR}/.. ABSOLUTE)
+endif()
+
 include(TargetClass)
-t_setTopDir(${CMAKE_CURRENT_SOURCE_DIR}/../runtime)
+t_setTopDir(${dartruntime_dir}/runtime)
 set(gen_dir ${CMAKE_CURRENT_BINARY_DIR}/gen)
 file(MAKE_DIRECTORY ${gen_dir})
 
@@ -16,6 +22,9 @@ elseif(UNIX)
 elseif(WIN32)
     include(Windows)
 endif()
+
+
+find_package(PythonInterp)
 
 
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DDEBUG")

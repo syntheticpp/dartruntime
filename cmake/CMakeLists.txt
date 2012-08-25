@@ -8,7 +8,6 @@ set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR})
 
 
 option(tests   "Enable tests" ON)
-option(bind    "Enable binding tests" ON)
 option(arch    "Build for ia32, x64, or Arm" OFF)
 option(release "Release build" ON)
 
@@ -83,24 +82,5 @@ if(tests)
     get_filename_component(rep_root ${t_top}/.. ABSOLUTE)
     message(STATUS "Run tests from the source folder: '${rep_root}' !")
     message(STATUS)
-endif()
-
-
-if(bind)
-    enable_testing()
-
-    macro(p_addExecutables _dir _prefix)
-        foreach(_it ${ARGN})
-            t_init(${_prefix}${_it})
-            t_addSources(${_dir}/${_prefix}${_it}.cc)
-            t_linkLibraries(${libdart_withcore})
-            t_includeDirectories(include)
-            t_includeDirectories(.) # needed because dart_api.h isn't complete
-            t_makeTest()
-        endforeach()
-    endmacro()
-
-    p_addExecutables(bind bind_ NativeFunction_foo NativeFunction_userdata NativeFunction_nativefield NativeFunction_class)
-    p_addExecutables(examples "" minimal_http_server)
 endif()
 

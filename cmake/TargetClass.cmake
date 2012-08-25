@@ -1,9 +1,6 @@
-# Copyright (c) 2011,2012 Peter Kümmel
+# Copyright (c) 2011, 2012 Peter Kümmel
 # All rights reserved. Use of this source code is governed by a
 # BSD-style license that can be found in the LICENSE file.
-
-
-find_package(PythonInterp)
 
 
 macro(t_setTopDir _dir)
