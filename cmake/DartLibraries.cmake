@@ -14,6 +14,8 @@ t_setTopDir(${dartruntime_dir}/runtime)
 set(gen_dir ${CMAKE_CURRENT_BINARY_DIR}/gen)
 file(MAKE_DIRECTORY ${gen_dir})
 
+set(sdklib ../sdk/lib)
+
 
 if(APPLE)
     include(Apple)
@@ -35,46 +37,70 @@ if(verbose)
 endif()
 
 
-macro(t_embed_builtin_dart name)
+macro(t_embed_builtin_dart name postfix)
     t_addDartFiles(${ARGN})
-    t_embedDartFiles(bin/builtin_in.cc ${gen_dir}/${name}.cc bin/builtin.h Builtin::${name}_source_)
+    t_embedDartFiles(bin/builtin_in.cc ${gen_dir}/${name}.cc bin/builtin.h Builtin::${name}${postfix})
 endmacro()
+
 
 macro(t_embed_boostrap_dart name postfix)
     t_addDartFiles(${ARGN})
     t_embedDartFiles(bin/builtin_in.cc ${gen_dir}/${name}.cc vm/bootstrap.h dart::Bootstrap::${name}${postfix})
 endmacro()
 
-macro(t_embed_builtin_dart_concat name)
+macro(t_embed_builtin_dart_concat name postfix)
     t_concatLibrary(${gen_dir}/${name}.dart ${ARGN})
     t_setDartFiles(${gen_dir}/${name}.dart)
-    t_embed_builtin_dart(${name})
+    t_embed_builtin_dart(${name} ${postfix})
 endmacro()
 
 
 # runtime/bin/utf_sources.gypi
 set(crypto_sources_dart
-    ../lib/crypto/crypto_vm.dart
-    ../lib/crypto/crypto_utils.dart
-    ../lib/crypto/hash_utils.dart
-    ../lib/crypto/hmac.dart
-    ../lib/crypto/md5.dart
-    ../lib/crypto/sha1.dart
-    ../lib/crypto/sha256.dart)
+    lib/crypto/crypto_vm.dart
+    ${sdklib}/crypto/crypto_utils.dart
+    ${sdklib}/crypto/hash_utils.dart
+    ${sdklib}/crypto/hmac.dart
+    ${sdklib}/crypto/md5.dart
+    ${sdklib}/crypto/sha1.dart
+    ${sdklib}/crypto/sha256.dart)
 
 # runtime/bin/utf_sources.gypi
 set(utf_sources_dart
-    ../lib/utf/utf_vm.dart
-    ../lib/utf/utf_core.dart
-    ../lib/utf/utf8.dart
-    ../lib/utf/utf16.dart
-    ../lib/utf/utf32.dart)
+    lib/utf/utf_vm.dart
+    ${sdklib}/utf/utf_core.dart
+    ${sdklib}/utf/utf8.dart
+    ${sdklib}/utf/utf16.dart
+    ${sdklib}/utf/utf32.dart)
 
 # runtime/lib/lib_sources.gypi
 set(lib_sources_dart
-    lib/byte_array.dart
+    lib/bool_patch.dart
+    lib/date_patch.dart
+    lib/array.dart
+    lib/array_patch.dart
+    lib/double.dart
+    lib/double_patch.dart
     lib/error.dart
-    lib/literal_factory.dart)
+    lib/errors_patch.dart
+    lib/expando_patch.dart
+    lib/function_patch.dart
+    lib/growable_array.dart
+    lib/identical_patch.dart
+    lib/immutable_map.dart
+    lib/integers.dart
+    lib/integers_patch.dart
+    lib/invocation_mirror_patch.dart
+    lib/map_patch.dart
+    lib/object_patch.dart
+    lib/print_patch.dart
+    lib/regexp_patch.dart
+    lib/stopwatch_patch.dart
+    lib/string_base.dart
+    lib/string_patch.dart
+    lib/type_patch.dart
+    lib/string_patch.dart
+    lib/weak_property.dart)
 
 # runtime/lib/lib_impl_sources.gypi
 set(lib_impl_sources_dart
@@ -102,6 +128,7 @@ set(lib_impl_sources_dart
 
 t_init(libdart_api)
 t_findHeaders(include .h)
+t_addHeaders(vm/version.h)
 t_addSources(vm/dart_api_impl.cc vm/debugger_api_impl.cc)
 t_includeDirectories(.)
 t_makeLibrary()
@@ -112,17 +139,22 @@ t_init(libdart_builtin)
 t_findHeaders(bin .h)
 t_findSources(bin .cc)
 t_removeSources(ALL  main _test io_in builtin_in builtin_nolib snapshot)
+
 t_removeForeignOsSources()
-t_embed_builtin_dart(builtin bin/builtin.dart)
-t_embed_builtin_dart(crypto ${crypto_sources_dart})
-t_embed_builtin_dart(json ../lib/json/json.dart)
-t_embed_builtin_dart(utf ${utf_sources_dart})
-t_embed_builtin_dart(web ../lib/web/web.dart)
-t_embed_builtin_dart_concat(uri ${t_top}/../lib/uri/uri.dart ${t_top}/../lib/uri/helpers.dart ${t_top}/../lib/uri/encode_decode.dart)
+t_embed_builtin_dart(builtin _source_ bin/builtin.dart)
+t_embed_builtin_dart(crypto _source_ ${crypto_sources_dart})
+t_embed_builtin_dart(json _source_ ${sdklib}/json/json.dart)
+t_embed_builtin_dart(utf _source_ ${utf_sources_dart})
+#t_embed_builtin_dart(web ${sdklib}/web/web.dart)
+t_embed_builtin_dart_concat(uri _source_ ${t_top}/${sdklib}/uri/uri.dart ${t_top}/${sdklib}/uri/helpers.dart ${t_top}/${sdklib}/uri/encode_decode.dart)
+t_findDartFiles(${sdklib}/io)
+t_embed_builtin_dart(io _source_)
 t_findDartFiles(bin)
 t_removeDartFiles(bin/builtin.dart)
+t_removeSources(ALL secure_socket) # TODO nss dependency
+t_removeDartFiles(bin/secure_socket.dart bin/secure_socket_patch.dart)
 t_prependDartFiles(bin/io.dart) # load first
-t_embed_builtin_dart(io)
+t_embed_builtin_dart(io_patch _)
 t_includeDirectories(.)
 t_makeLibrary()
 
@@ -130,7 +162,7 @@ t_makeLibrary()
 t_init(libdart_vm)
 t_findHeaders(vm .h)
 t_findSources(vm .cc)
-t_removeSources(ALL  _test _in.cc _api_impl bootstrap.cc bootstrap_nocorelib.cc)
+t_removeSources(ALL  _test _in.cc _api_impl bootstrap.cc bootstrap_nocorelib.cc vtune.cc)
 t_removeForeignOsSources()
 t_includeDirectories(.)
 t_makeLibrary()
@@ -174,22 +206,23 @@ t_makeLibrary()
 
 t_init(libdart_lib_withcore)
 t_addSources(vm/bootstrap.cc)
-t_findDartFiles(../lib/core)
-t_removeDartFiles(../lib/core/core.dart)
-#    foreach(_it ${t_dart_sources})
-#        message(${_it})
-#    endforeach()
+t_findDartFiles(${sdklib}/core)
+t_removeDartFiles(${sdklib}/core/core.dart)
 t_embed_boostrap_dart(corelib _source_)
 t_embed_boostrap_dart(corelib_patch _ ${lib_sources_dart})
-t_findDartFiles(../lib/coreimpl)
-t_embed_boostrap_dart(corelib_impl _source_)
-t_embed_boostrap_dart(corelib_impl_patch _ ${lib_impl_sources_dart})
-t_embed_boostrap_dart(isolate _source_ ../lib/isolate/base.dart ../lib/isolate/timer.dart)
+t_embed_boostrap_dart(isolate _source_ ${sdklib}/isolate/base.dart ${sdklib}/isolate/timer.dart)
 t_embed_boostrap_dart(isolate_patch _ lib/isolate_patch.dart)
-t_embed_boostrap_dart(math _source_ ../lib/math/base.dart ../lib/math/random.dart)
+t_embed_boostrap_dart(math _source_ ${sdklib}/math/base.dart ${sdklib}/math/random.dart)
 t_embed_boostrap_dart(math_patch _ lib/math_patch.dart)
 t_embed_boostrap_dart(mirrors _source_ lib/empty_source.dart)
-t_embed_boostrap_dart(mirrors_patch _ ../lib/mirrors/mirrors.dart lib/mirrors_impl.dart)
+t_embed_boostrap_dart(mirrors_patch _ ${sdklib}/mirrors/mirrors.dart lib/mirrors_impl.dart)
+t_embed_boostrap_dart(scalarlist _source_ ${sdklib}/scalarlist/scalarlist.dart ${sdklib}/scalarlist/byte_arrays.dart)
+t_embed_boostrap_dart(scalarlist_patch _ lib/byte_array.dart)
+t_embed_boostrap_dart(collection _source_
+    ${sdklib}/collection/arrays.dart
+    ${sdklib}/collection/collections.dart
+    ${sdklib}/collection/maps.dart
+    ${sdklib}/collection/splay_tree.dart)
 t_includeDirectories(.)
 t_makeLibrary()
 
@@ -203,3 +236,4 @@ set(libdart_withcore
     libdart_jscre
     libdart_double_conversion
     )
+

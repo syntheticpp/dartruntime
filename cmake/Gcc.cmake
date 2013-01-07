@@ -17,4 +17,4 @@ if(NOT GCC_VERSION VERSION_LESS 4.3)
 endif()
 
 set(link  "-fvisibility=hidden -fvisibility-inlines-hidden")
-set(lang  "-ansi -fno-rtti -fno-exceptions")
+set(lang  "-fno-rtti -fno-exceptions")

@@ -726,6 +726,8 @@ DART_EXPORT Dart_Handle Dart_RemoveGcEpilogueCallback(
 DART_EXPORT const char* Dart_VersionString() {
   return Version::String();
 }
+//HACK
+const char* Version::str_ = 0;
 
 DART_EXPORT bool Dart_Initialize(
     Dart_IsolateCreateCallback create,

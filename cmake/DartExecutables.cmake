@@ -7,7 +7,7 @@
 #
 
 t_init(gen_snapshot)
-t_addSources(bin/gen_snapshot.cc bin/builtin.cc)
+t_addSources(bin/gen_snapshot.cc bin/builtin_gen_snapshot.cc)
 t_linkLibraries(${libdart_withcore})
 t_includeDirectories(.)
 t_makeExecutable()
@@ -31,6 +31,7 @@ t_linkLibraries(
 t_includeDirectories(.)
 t_makeExecutable()
 
+
 t_init(dart_no_snapshot)
 t_addSources(bin/main.cc bin/builtin.cc bin/snapshot_empty.cc)
 t_linkLibraries(${libdart_withcore})
@@ -40,10 +41,11 @@ t_makeExecutable()
 
 t_init(dart)
 t_addSources(bin/main.cc bin/builtin_nolib.cc)
-t_embed_builtin_dart(web ../lib/web/web.dart)
+#t_embed_builtin_dart(web ../lib/web/web.dart)
 t_addSnapshotFile(bin/snapshot_in.cc ${gen_dir}/snapshot_gen gen_snapshot)
 t_linkLibraries(${libdart_withcore})
 t_includeDirectories(.)
 t_makeExecutable()
 t_install()
+
 
