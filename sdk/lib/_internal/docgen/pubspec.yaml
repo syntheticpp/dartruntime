@@ -1,4 +1,0 @@
-name: docgen
-description: A documentation generator for the Dart repository.
-dependencies:
-  markdown: any
