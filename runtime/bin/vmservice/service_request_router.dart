@@ -5,5 +5,5 @@
 part of vmservice;
 
 abstract class ServiceRequestRouter {
-  bool route(ServiceRequest request);
+  Future route(ServiceRequest request);
 }
